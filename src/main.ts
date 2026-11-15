@@ -44,7 +44,7 @@ export class MinerAdapter extends utils.Adapter {
     private readonly updateSources = new UpdateSources();
     private updateCheckHandle: AsyncIntervalReturnType | undefined;
     /**
-     * The devices whose miner is reachable, by object id, with the name `info.connection` lists them by.
+     * The devices whose miner is reachable, by object id, with names listed in `info.connectedMiners`.
      */
     private readonly onlineDevices = new Map<string, string>();
     /**
@@ -87,12 +87,24 @@ export class MinerAdapter extends utils.Adapter {
         // Initialize i18n for device management translations
         await I18n.init(__dirname, this);
 
-        // Reset the connection indicator during startup. Before 1.2.0 it was a boolean: existing instances keep their
-        // object from the old version, so bring its type in line with the list it holds now
+        // The adapter is operational even when all PV-controlled miners are offline.
+        // Keep the admin connection indicator independent of miner availability.
         await this.extendObject('info.connection', {
-            common: { type: 'string', role: 'info.status', name: 'List of reachable miners' },
+            common: { type: 'string', role: 'info.status', name: 'Adapter status' },
         });
-        await this.setState('info.connection', '', true);
+        await this.extendObject('info.connectedMiners', {
+            type: 'state',
+            common: {
+                type: 'string',
+                role: 'text',
+                name: 'Reachable miners',
+                read: true,
+                write: false,
+            },
+            native: {},
+        });
+        await this.setState('info.connection', 'Adapter running', true);
+        await this.setState('info.connectedMiners', '', true);
 
         // Initialize your adapter here
         await this.createBasicObjectStructure();
@@ -123,6 +135,7 @@ export class MinerAdapter extends utils.Adapter {
             }
 
             await this.setState('info.connection', '', true);
+            await this.setState('info.connectedMiners', '', true);
 
             callback();
         } catch {
@@ -643,13 +656,12 @@ export class MinerAdapter extends utils.Adapter {
     }
 
     /**
-     * Lists the reachable miners in `info.connection`, comma-separated like other multi-device adapters (e.g. sonoff)
-     * do: the admin shows the instance green while the list is not empty, and shows the list itself. Green needs just
-     * one reachable miner - requiring all would turn it yellow whenever a single miner is switched off, e.g. at night.
+     * List the reachable miners separately from the adapter's own connection status.
+     * The adapter remains healthy when PV-controlled miners are switched off.
      */
     private async updateConnectionState(): Promise<void> {
         const names = [...this.onlineDevices.values()].sort((a, b) => a.localeCompare(b));
-        await this.setStateChangedAsync('info.connection', { val: names.join(','), ack: true });
+        await this.setStateChangedAsync('info.connectedMiners', { val: names.join(','), ack: true });
     }
 
     private async processNewStats(
