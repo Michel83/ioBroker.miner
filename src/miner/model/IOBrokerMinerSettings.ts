@@ -17,6 +17,34 @@ const logger = Logger.getLogger('IOBrokerMinerSettings');
     this adapter needs/stores more info per miner than is strictly required if just using the lib, so create su-types
  */
 
+/** PV control settings stored independently for each miner. */
+export interface MinerPvControlSettings {
+    /** Whether PV control may operate this miner (default: false). */
+    enabled: boolean;
+    /** Lower number means higher priority. */
+    priority: number;
+    /** Minimum controllable target power in watts. */
+    minPower: number;
+    /** Maximum controllable target power in watts. */
+    maxPower: number;
+    /** Optional offset added to the requested power target in watts. */
+    powerOffset: number;
+    /** Optional ioBroker state ID of an external power relay. */
+    relayStateId: string;
+    /** Value to write to the relay to switch it on. */
+    relayOnValue: boolean;
+    /** Delay after enabling the relay before starting the miner, in seconds. */
+    startupDelay: number;
+    /** Minimum time between stop and restart, in seconds. */
+    restartDelay: number;
+    /** Delay before switching off the relay after stopping, in seconds. */
+    shutdownDelay: number;
+    /** Optional measured power state ID. */
+    powerStateId: string;
+    /** Optional running/ready feedback state ID. */
+    runningStateId: string;
+}
+
 // settings / native part of iobroker 'device'- objects
 /**
  *
@@ -56,6 +84,9 @@ export interface IOBrokerMinerSettings extends IOBrokerDeviceSettings {
      *
      */
     settings: MinerSettings;
+
+    /** Optional for backwards compatibility with existing miner objects. */
+    pvControl?: MinerPvControlSettings;
 }
 
 /**
