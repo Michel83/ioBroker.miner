@@ -357,14 +357,23 @@ export class MinerAdapter extends utils.Adapter {
         featureId: string,
         value: ioBroker.StateValue,
     ): Promise<void> {
-        const miner = deviceSettings.settings.id ? this.minerManager.getMiner(deviceSettings.settings.id) : undefined;
-        if (!miner) {
+        const minerId = deviceSettings.settings.id;
+        if (!minerId || !this.minerManager.hasMiner(minerId)) {
             this.log.warn(`cannot set ${featureId} on device ${deviceSettings.name}: the device is disabled`);
+            return;
+        }
+        if (this.pvSafeStops.has(minerId) || this.pvShuttingDown) {
+            this.log.warn(`custom feature ${featureId} blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`);
             return;
         }
 
         try {
-            const applied = await miner.setCustomFeature(featureId, value);
+            const applied = await this.minerManager.withExclusiveMiner(minerId, miner => {
+                if (this.pvSafeStops.has(minerId) || this.pvShuttingDown) {
+                    throw new Error('PV safe stop or adapter shutdown active');
+                }
+                return miner.setCustomFeature(featureId, value);
+            });
             await this.setState(stateId, { val: applied, ack: true });
         } catch (e) {
             this.log.warn(`setting ${featureId} on device ${deviceSettings.name} failed: ${String(e)}`);
