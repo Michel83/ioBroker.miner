@@ -398,7 +398,16 @@ describe('custom features', () => {
             writes.push({ id, ...state });
             return Promise.resolve();
         };
-        adapter.minerManager = { getMiner: id => (id === 'dev' ? { setCustomFeature } : undefined) };
+        adapter.minerManager = {
+            getMiner: id => (id === 'dev' ? { setCustomFeature } : undefined),
+            hasMiner: id => id === 'dev',
+            withExclusiveMiner: async (id, operation) => {
+                if (id !== 'dev') {
+                    throw new Error('Miner not found');
+                }
+                return operation({ setCustomFeature });
+            },
+        };
         return { adapter, writes, warnings };
     }
 
