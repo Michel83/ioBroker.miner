@@ -154,7 +154,15 @@
     ]
   },
   "native": {
-    "checkForUpdates": true
+    "checkForUpdates": true,
+    "pvEnabled": false,
+    "pvGridPowerId": "",
+    "pvBatteryPowerId": "",
+    "pvInterval": 120,
+    "pvReserve": 200,
+    "pvStartHour": 12,
+    "pvEndHour": 20,
+    "pvMaxDataAge": 180
   },
   "notifications": [
     {
