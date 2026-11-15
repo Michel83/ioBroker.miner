@@ -19,6 +19,7 @@ import { isWithinPowerTargetConstraints, type Miner } from './lib/miner/miner/Mi
 import type { MinerSettings } from './lib/miner/model/MinerSettings';
 import type { MinerStats } from './lib/miner/model/MinerStats';
 import { asyncDynamicInterval, setTimerBackend, type AsyncIntervalReturnType } from './lib/utils/delay';
+import { PvShutdownConfirmation, isPvShutdownSafe } from './lib/pv/PvShutdownSafety';
 import { UpdateSources } from './lib/update/UpdateSources';
 import { runUpdateChecks, type UpdateCheckSummary } from './lib/update/runUpdateChecks';
 import type { UpdateCheckContext, UpdateCheckResult } from './lib/miner/model/UpdateCheckResult';
@@ -47,6 +48,7 @@ export class MinerAdapter extends utils.Adapter {
     private pvMonitorBusy = false;
     private pvMonitorWarning = '';
     private readonly pvSafeStops = new Set<string>();
+    private pvShuttingDown = false;
 
     /**
      * The devices whose miner is reachable, by object id, with names listed in `info.connectedMiners`.
@@ -140,6 +142,7 @@ export class MinerAdapter extends utils.Adapter {
      * @param callback - callback to signal completion
      */
     private async onUnload(callback: () => void): Promise<void> {
+        this.pvShuttingDown = true;
         try {
             this.updateCheckHandle?.clear();
             if (this.pvMonitorTimer) {
@@ -276,6 +279,11 @@ export class MinerAdapter extends utils.Adapter {
                         return;
                     }
 
+                    if (this.pvSafeStops.has(deviceSettings.settings.id) || this.pvShuttingDown) {
+                        this.log.warn(`setProfile blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`);
+                        return;
+                    }
+
                     await this.minerManager.setProfile(deviceSettings.settings.id, profile);
                     await this.setState(id, { val: profile, ack: true });
                     break;
@@ -302,6 +310,11 @@ export class MinerAdapter extends utils.Adapter {
                     // TODO: why this copy pasta??
                     if (deviceSettings.settings.id === undefined) {
                         this.log.error(`device ${deviceSettings.name} has no id`);
+                        return;
+                    }
+
+                    if (this.pvSafeStops.has(deviceSettings.settings.id) || this.pvShuttingDown) {
+                        this.log.warn(`setPowerTarget blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`);
                         return;
                     }
 
@@ -1144,6 +1157,35 @@ export class MinerAdapter extends utils.Adapter {
         return state.val;
     }
 
+    private async readFreshPvMeasurement(
+        id: string,
+        maxAgeMs: number,
+    ): Promise<{ value: number; timestamp: number } | undefined> {
+        if (!id) {
+            return undefined;
+        }
+
+        const state = await this.getForeignStateAsync(id);
+        const now = Date.now();
+
+        if (
+            !state ||
+            typeof state.val !== 'number' ||
+            !Number.isFinite(state.val) ||
+            typeof state.ts !== 'number' ||
+            !Number.isFinite(state.ts) ||
+            state.ts > now ||
+            now - state.ts > maxAgeMs
+        ) {
+            return undefined;
+        }
+
+        return {
+            value: state.val,
+            timestamp: state.ts,
+        };
+    }
+
     private async runPvMonitor(): Promise<void> {
         if (this.pvMonitorBusy) {
             return;
@@ -1180,7 +1222,7 @@ export class MinerAdapter extends utils.Adapter {
      */
     private async safeStopPvMiner(settings: IOBrokerMinerSettings): Promise<void> {
         const id = settings.settings.id;
-        if (!id || this.pvSafeStops.has(id)) {
+        if (!id || this.pvSafeStops.has(id) || this.pvShuttingDown) {
             throw new Error('Safe stop already active or miner ID missing');
         }
         const pv = settings.pvControl;
@@ -1194,48 +1236,89 @@ export class MinerAdapter extends utils.Adapter {
         const deviceId = this.getDeviceObjectId(settings);
         const ageMs = Math.max(10, Number(this.config.pvMaxDataAge) || 180) * 1000;
         const maxWaitMs = 5 * 60_000;
-        const stableMs = 30_000;
-        const maxIdleWatts = 100;
         const started = Date.now();
-        let stableSince: number | undefined;
+        const confirmation = new PvShutdownConfirmation();
+        let pausedAt = 0;
         try {
             this.log.info(`PV safe stop requested for ${settings.name}; relay stays ON until confirmed`);
             await this.minerManager.stopMiner(id);
-            // Never assume BOSMiner.pause has stopped the machine: it has no ACK.
+            pausedAt = Date.now();
+            // A successful pause command is not proof of stopped hardware.
             while (Date.now() - started < maxWaitMs) {
-                if (this.config.pvEnabled !== true) {
+                if (this.config.pvEnabled !== true || this.pvShuttingDown) {
                     throw new Error('PV automation disabled during safe stop');
                 }
                 const [power, hash, seen, relay] = await Promise.all([
-                    this.readFreshPvValue(pv.powerStateId, ageMs),
+                    this.readFreshPvMeasurement(pv.powerStateId, ageMs),
                     this.getStateAsync(`${deviceId}.stats.totalHashrate`),
                     this.getStateAsync(`${deviceId}.info.lastSeen`),
                     this.getForeignStateAsync(pv.relayStateId),
                 ]);
                 const now = Date.now();
-                const hashFresh =
-                    hash &&
-                    typeof hash.val === 'number' &&
-                    Number.isFinite(hash.val) &&
-                    typeof hash.ts === 'number' &&
-                    now - hash.ts <= ageMs &&
-                    hash.ts <= now + 10_000 &&
-                    seen?.val !== undefined &&
-                    typeof seen.val === 'number' &&
-                    now - seen.val <= ageMs;
                 const relayIsOn =
-                    relay?.val === pv.relayOnValue && typeof relay.ts === 'number' && now - relay.ts <= ageMs;
+                    relay?.val === pv.relayOnValue &&
+                    typeof relay.ts === 'number' &&
+                    relay.ts <= now &&
+                    now - relay.ts <= ageMs;
+
                 if (!relayIsOn) {
                     throw new Error(`Relay state unavailable or not ON for ${settings.name}`);
                 }
-                const stopped = power !== undefined && power <= maxIdleWatts && hashFresh && hash.val === 0;
-                stableSince = stopped ? (stableSince ?? now) : undefined;
+
+                const confirmed = confirmation.update(
+                    {
+                        hashrate: typeof hash?.val === 'number' ? hash.val : undefined,
+                        hashrateTimestamp: hash?.ts,
+                        power: power?.value,
+                        powerTimestamp: power?.timestamp,
+                        lastSeen: typeof seen?.val === 'number' ? seen.val : undefined,
+                    },
+                    now,
+                    ageMs,
+                    pausedAt,
+                );
+
                 const delayMs = Math.max(0, Number(pv.shutdownDelay) || 0) * 1000;
-                if (stableSince !== undefined && now - stableSince >= stableMs && now - started >= delayMs) {
+
+                if (confirmed && now - pausedAt >= delayMs) {
                     // Recheck the PV enable flag immediately before the relay command.
-                    if (this.config.pvEnabled !== true) {
+                    if (this.config.pvEnabled !== true || this.pvShuttingDown) {
                         throw new Error('PV automation disabled before relay shutdown');
                     }
+                    // Final independent check immediately before relay shutdown.
+                    const [finalPower, finalHash, finalSeen, finalRelay] = await Promise.all([
+                        this.readFreshPvMeasurement(pv.powerStateId, 15_000),
+                        this.getStateAsync(`${deviceId}.stats.totalHashrate`),
+                        this.getStateAsync(`${deviceId}.info.lastSeen`),
+                        this.getForeignStateAsync(pv.relayStateId),
+                    ]);
+
+                    const finalNow = Date.now();
+
+                    const finalSafe = isPvShutdownSafe(
+                        {
+                            hashrate: typeof finalHash?.val === 'number' ? finalHash.val : undefined,
+                            hashrateTimestamp: finalHash?.ts,
+                            power: finalPower?.value,
+                            powerTimestamp: finalPower?.timestamp,
+                            lastSeen: typeof finalSeen?.val === 'number' ? finalSeen.val : undefined,
+                        },
+                        finalNow,
+                        15_000,
+                        pausedAt,
+                    );
+
+                    if (
+                        !finalSafe ||
+                        finalRelay?.val !== pv.relayOnValue ||
+                        typeof finalRelay.ts !== 'number' ||
+                        finalRelay.ts > finalNow ||
+                        finalNow - finalRelay.ts > ageMs ||
+                        this.config.pvEnabled !== true || this.pvShuttingDown
+                    ) {
+                        throw new Error(`Final PV shutdown safety check failed for ${settings.name}`);
+                    }
+
                     await this.setForeignStateAsync(pv.relayStateId, !pv.relayOnValue);
                     this.log.info(`PV safe stop confirmed for ${settings.name}; relay switched OFF`);
                     return;
