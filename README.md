@@ -234,3 +234,4 @@ Once more than one miner type supports the same thing, it is moved to the common
 Copyright (c) 2026 SimonFischer04 <simi.fischa@gmail.com>  
 
 This project is licensed under the GNU General Public License v3.0 - see [LICENSE](https://github.com/SimonFischer04/ioBroker.miner/blob/main/LICENSE) for details.
+<!-- Fork: connection status adjustment -->
