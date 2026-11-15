@@ -235,12 +235,12 @@
       "_id": "info.connection",
       "type": "state",
       "common": {
-        "role": "info.status",
-        "name": "Adapter status",
-        "type": "string",
+        "role": "indicator.connected",
+        "name": "Adapter connection",
+        "type": "boolean",
         "read": true,
         "write": false,
-        "def": ""
+        "def": false
       },
       "native": {}
     },
