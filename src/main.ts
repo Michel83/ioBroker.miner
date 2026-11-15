@@ -43,7 +43,7 @@ export class MinerAdapter extends utils.Adapter {
     public readonly minerManager: MinerManager = new MinerManager();
     private readonly updateSources = new UpdateSources();
     private updateCheckHandle: AsyncIntervalReturnType | undefined;
-    private pvMonitorTimer: ioBroker.Interval | undefined;
+    private pvMonitorTimer: ReturnType<typeof setInterval> | undefined;
     private pvMonitorBusy = false;
     private pvMonitorWarning = '';
     private readonly pvSafeStops = new Set<string>();
@@ -143,7 +143,7 @@ export class MinerAdapter extends utils.Adapter {
         try {
             this.updateCheckHandle?.clear();
             if (this.pvMonitorTimer) {
-                this.clearInterval(this.pvMonitorTimer);
+                clearInterval(this.pvMonitorTimer);
                 this.pvMonitorTimer = undefined;
             }
             await this.minerManager.closeAll();
@@ -1114,9 +1114,10 @@ export class MinerAdapter extends utils.Adapter {
         }
         await this.setState('pvControl.enabled', { val: this.config.pvEnabled === true, ack: true });
         const intervalSeconds = Math.max(30, Number(this.config.pvInterval) || 120);
-        this.pvMonitorTimer = this.setInterval(() => {
+        this.pvMonitorTimer = setInterval(() => {
             void this.runPvMonitor().catch((error: unknown) => this.log.error(`PV monitor failed: ${String(error)}`));
         }, intervalSeconds * 1000);
+        this.pvMonitorTimer.unref();
         await this.runPvMonitor();
         if (this.config.pvEnabled === true) {
             this.log.warn(
@@ -1154,16 +1155,16 @@ export class MinerAdapter extends utils.Adapter {
             const grid = await this.readFreshPvValue(this.config.pvGridPowerId || '', ageMs);
             const battery = await this.readFreshPvValue(this.config.pvBatteryPowerId || '', ageMs);
             const valid = grid !== undefined && battery !== undefined;
-            await this.setStateChangedAsync('pvControl.valid', { val: valid, ack: true });
-            await this.setStateChangedAsync('pvControl.gridPower', { val: grid ?? null, ack: true });
-            await this.setStateChangedAsync('pvControl.batteryPower', { val: battery ?? null, ack: true });
+            await this.setState('pvControl.valid', { val: valid, ack: true });
+            await this.setState('pvControl.gridPower', { val: grid ?? null, ack: true });
+            await this.setState('pvControl.batteryPower', { val: battery ?? null, ack: true });
             const reserve = Math.max(0, Number(this.config.pvReserve) || 0);
             const surplus = valid ? Math.max(0, -grid - reserve - Math.max(0, battery)) : null;
-            await this.setStateChangedAsync('pvControl.surplus', { val: surplus, ack: true });
+            await this.setState('pvControl.surplus', { val: surplus, ack: true });
             const status = !valid
                 ? 'Missing or stale PV measurements; no commands sent'
                 : 'Read-only diagnostics active; miner and relay commands locked';
-            await this.setStateChangedAsync('pvControl.status', { val: status, ack: true });
+            await this.setState('pvControl.status', { val: status, ack: true });
             if (status !== this.pvMonitorWarning) {
                 this.log.info(`PV: ${status}`);
                 this.pvMonitorWarning = status;
