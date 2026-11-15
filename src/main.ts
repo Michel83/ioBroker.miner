@@ -1251,91 +1251,91 @@ export class MinerAdapter extends utils.Adapter {
         try {
             this.log.info(`PV safe stop requested for ${settings.name}; relay stays ON until confirmed`);
             await this.minerManager.withExclusiveMiner(id, async miner => {
-                await miner.stop();
-            pausedAt = Date.now();
-            // A successful pause command is not proof of stopped hardware.
-            while (Date.now() - started < maxWaitMs) {
-                if (this.config.pvEnabled !== true || this.pvShuttingDown) {
-                    throw new Error('PV automation disabled during safe stop');
-                }
-                const [power, hash, seen, relay] = await Promise.all([
-                    this.readFreshPvMeasurement(pv.powerStateId, ageMs),
-                    this.getStateAsync(`${deviceId}.stats.totalHashrate`),
-                    this.getStateAsync(`${deviceId}.info.lastSeen`),
-                    this.getForeignStateAsync(pv.relayStateId),
-                ]);
-                const now = Date.now();
-                const relayIsOn =
-                    relay?.val === pv.relayOnValue &&
-                    typeof relay.ts === 'number' &&
-                    relay.ts <= now &&
-                    now - relay.ts <= ageMs;
-
-                if (!relayIsOn) {
-                    throw new Error(`Relay state unavailable or not ON for ${settings.name}`);
-                }
-
-                const confirmed = confirmation.update(
-                    {
-                        hashrate: typeof hash?.val === 'number' ? hash.val : undefined,
-                        hashrateTimestamp: hash?.ts,
-                        power: power?.value,
-                        powerTimestamp: power?.timestamp,
-                        lastSeen: typeof seen?.val === 'number' ? seen.val : undefined,
-                    },
-                    now,
-                    ageMs,
-                    pausedAt,
-                );
-
-                const delayMs = Math.max(0, Number(pv.shutdownDelay) || 0) * 1000;
-
-                if (confirmed && now - pausedAt >= delayMs) {
-                    // Recheck the PV enable flag immediately before the relay command.
+                    await miner.stop();
+                pausedAt = Date.now();
+                // A successful pause command is not proof of stopped hardware.
+                while (Date.now() - started < maxWaitMs) {
                     if (this.config.pvEnabled !== true || this.pvShuttingDown) {
-                        throw new Error('PV automation disabled before relay shutdown');
+                        throw new Error('PV automation disabled during safe stop');
                     }
-                    // Final independent check immediately before relay shutdown.
-                    const [finalPower, finalHash, finalSeen, finalRelay] = await Promise.all([
-                        this.readFreshPvMeasurement(pv.powerStateId, 15_000),
+                    const [power, hash, seen, relay] = await Promise.all([
+                        this.readFreshPvMeasurement(pv.powerStateId, ageMs),
                         this.getStateAsync(`${deviceId}.stats.totalHashrate`),
                         this.getStateAsync(`${deviceId}.info.lastSeen`),
                         this.getForeignStateAsync(pv.relayStateId),
                     ]);
+                    const now = Date.now();
+                    const relayIsOn =
+                        relay?.val === pv.relayOnValue &&
+                        typeof relay.ts === 'number' &&
+                        relay.ts <= now &&
+                        now - relay.ts <= ageMs;
 
-                    const finalNow = Date.now();
+                    if (!relayIsOn) {
+                        throw new Error(`Relay state unavailable or not ON for ${settings.name}`);
+                    }
 
-                    const finalSafe = isPvShutdownSafe(
+                    const confirmed = confirmation.update(
                         {
-                            hashrate: typeof finalHash?.val === 'number' ? finalHash.val : undefined,
-                            hashrateTimestamp: finalHash?.ts,
-                            power: finalPower?.value,
-                            powerTimestamp: finalPower?.timestamp,
-                            lastSeen: typeof finalSeen?.val === 'number' ? finalSeen.val : undefined,
+                            hashrate: typeof hash?.val === 'number' ? hash.val : undefined,
+                            hashrateTimestamp: hash?.ts,
+                            power: power?.value,
+                            powerTimestamp: power?.timestamp,
+                            lastSeen: typeof seen?.val === 'number' ? seen.val : undefined,
                         },
-                        finalNow,
-                        15_000,
+                        now,
+                        ageMs,
                         pausedAt,
                     );
 
-                    if (
-                        !finalSafe ||
-                        finalRelay?.val !== pv.relayOnValue ||
-                        typeof finalRelay.ts !== 'number' ||
-                        finalRelay.ts > finalNow ||
-                        finalNow - finalRelay.ts > ageMs ||
-                        this.config.pvEnabled !== true || this.pvShuttingDown
-                    ) {
-                        throw new Error(`Final PV shutdown safety check failed for ${settings.name}`);
-                    }
+                    const delayMs = Math.max(0, Number(pv.shutdownDelay) || 0) * 1000;
 
-                    await this.setForeignStateAsync(pv.relayStateId, !pv.relayOnValue);
-                    this.log.info(`PV safe stop confirmed for ${settings.name}; relay switched OFF`);
-                    return;
+                    if (confirmed && now - pausedAt >= delayMs) {
+                        // Recheck the PV enable flag immediately before the relay command.
+                        if (this.config.pvEnabled !== true || this.pvShuttingDown) {
+                            throw new Error('PV automation disabled before relay shutdown');
+                        }
+                        // Final independent check immediately before relay shutdown.
+                        const [finalPower, finalHash, finalSeen, finalRelay] = await Promise.all([
+                            this.readFreshPvMeasurement(pv.powerStateId, 15_000),
+                            this.getStateAsync(`${deviceId}.stats.totalHashrate`),
+                            this.getStateAsync(`${deviceId}.info.lastSeen`),
+                            this.getForeignStateAsync(pv.relayStateId),
+                        ]);
+
+                        const finalNow = Date.now();
+
+                        const finalSafe = isPvShutdownSafe(
+                            {
+                                hashrate: typeof finalHash?.val === 'number' ? finalHash.val : undefined,
+                                hashrateTimestamp: finalHash?.ts,
+                                power: finalPower?.value,
+                                powerTimestamp: finalPower?.timestamp,
+                                lastSeen: typeof finalSeen?.val === 'number' ? finalSeen.val : undefined,
+                            },
+                            finalNow,
+                            15_000,
+                            pausedAt,
+                        );
+
+                        if (
+                            !finalSafe ||
+                            finalRelay?.val !== pv.relayOnValue ||
+                            typeof finalRelay.ts !== 'number' ||
+                            finalRelay.ts > finalNow ||
+                            finalNow - finalRelay.ts > ageMs ||
+                            this.config.pvEnabled !== true || this.pvShuttingDown
+                        ) {
+                            throw new Error(`Final PV shutdown safety check failed for ${settings.name}`);
+                        }
+
+                        await this.setForeignStateAsync(pv.relayStateId, !pv.relayOnValue);
+                        this.log.info(`PV safe stop confirmed for ${settings.name}; relay switched OFF`);
+                        return;
+                    }
+                    await this.delay(5_000);
                 }
-                await this.delay(5_000);
-            }
-            throw new Error(`PV safe stop timed out for ${settings.name}; relay remains ON`);
+                throw new Error(`PV safe stop timed out for ${settings.name}; relay remains ON`);
             });
         } catch (error) {
             this.log.error(`PV safe stop failed for ${settings.name}; relay NOT switched off: ${String(error)}`);
