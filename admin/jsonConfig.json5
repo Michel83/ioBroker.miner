@@ -62,7 +62,7 @@
           "lg": 12
         },
         "pvGridPowerId": {
-          "type": "id",
+          "type": "objectId",
           "label": "Datenpunkt Netzleistung",
           "help": "Positive Werte = Netzbezug, negative Werte = Einspeisung.",
           "newLine": true,
@@ -70,7 +70,7 @@
           "md": 6
         },
         "pvBatteryPowerId": {
-          "type": "id",
+          "type": "objectId",
           "label": "Datenpunkt Batterieleistung",
           "help": "Positive Werte = Entladung, negative Werte = Ladung.",
           "newLine": true,
