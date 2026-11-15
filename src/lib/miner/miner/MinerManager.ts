@@ -105,13 +105,14 @@ export class MinerManager {
         const miner = this.getMinerById(id);
         if (!miner) {
             logger.warn(`[startMiner] miner with id ${id} not found`);
-            return;
+            throw new Error(`[startMiner] miner with id ${id} not found`);
         }
 
         try {
             await miner.start();
         } catch (e) {
             logger.error(`[startMiner] failed to start miner with id ${id}: ${String(e)}`);
+            throw e;
         }
     }
 
@@ -125,13 +126,14 @@ export class MinerManager {
         const miner = this.getMinerById(id);
         if (!miner) {
             logger.warn(`[stopMiner] miner with id ${id} not found`);
-            return;
+            throw new Error(`[stopMiner] miner with id ${id} not found`);
         }
 
         try {
             await miner.stop();
         } catch (e) {
             logger.error(`[stopMiner] failed to stop miner with id ${id}: ${String(e)}`);
+            throw e;
         }
     }
 
@@ -169,7 +171,7 @@ export class MinerManager {
         const miner = this.getMinerById(id);
         if (!miner) {
             logger.warn(`[setPowerTarget] miner with id ${id} not found`);
-            return;
+            throw new Error(`[setPowerTarget] miner with id ${id} not found`);
         }
 
         try {
@@ -178,6 +180,7 @@ export class MinerManager {
             logger.error(
                 `[setPowerTarget] failed to set power target ${powerTarget} W on miner with id ${id}: ${String(e)}`,
             );
+            throw e;
         }
     }
 }
