@@ -43,6 +43,11 @@ export class MinerAdapter extends utils.Adapter {
     public readonly minerManager: MinerManager = new MinerManager();
     private readonly updateSources = new UpdateSources();
     private updateCheckHandle: AsyncIntervalReturnType | undefined;
+    private pvMonitorTimer: ioBroker.Interval | undefined;
+    private pvMonitorBusy = false;
+    private pvMonitorWarning = '';
+    private readonly pvSafeStops = new Set<string>();
+
     /**
      * The devices whose miner is reachable, by object id, with names listed in `info.connectedMiners`.
      */
@@ -126,6 +131,7 @@ export class MinerAdapter extends utils.Adapter {
         this.subscribeStates('miner.*.enabled');
 
         this.scheduleUpdateChecks();
+        await this.initializePvMonitor();
     }
 
     /**
@@ -136,6 +142,10 @@ export class MinerAdapter extends utils.Adapter {
     private async onUnload(callback: () => void): Promise<void> {
         try {
             this.updateCheckHandle?.clear();
+            if (this.pvMonitorTimer) {
+                this.clearInterval(this.pvMonitorTimer);
+                this.pvMonitorTimer = undefined;
+            }
             await this.minerManager.closeAll();
 
             if (this.deviceManagement) {
@@ -226,7 +236,14 @@ export class MinerAdapter extends utils.Adapter {
                     }
 
                     if (state.val) {
+                        if (this.pvSafeStops.has(deviceSettings.settings.id)) {
+                            this.log.warn(`Cannot start ${deviceSettings.name}: safe stop still in progress`);
+                            return;
+                        }
                         await this.minerManager.startMiner(deviceSettings.settings.id);
+                    } else if (this.config.pvEnabled === true && deviceSettings.pvControl?.enabled === true) {
+                        // Safe relay shutdown is opt-in; manual control stays unchanged when PV is disabled.
+                        await this.safeStopPvMiner(deviceSettings);
                     } else {
                         await this.minerManager.stopMiner(deviceSettings.settings.id);
                     }
@@ -1067,6 +1084,158 @@ export class MinerAdapter extends utils.Adapter {
             } catch {
                 // Object doesn't exist or can't be deleted — ignore
             }
+        }
+    }
+
+    /**
+     * Read-only PV diagnostics. Does not start, stop, or power-cycle miners.
+     * The controller will only be enabled after a separate safe shutdown implementation.
+     */
+    private async initializePvMonitor(): Promise<void> {
+        await this.extendObject('pvControl', {
+            type: 'channel',
+            common: { name: 'PV control diagnostics' },
+            native: {},
+        });
+        const states: Record<string, { name: string; type: 'boolean' | 'number' | 'string'; unit?: string }> = {
+            enabled: { name: 'PV automation configured', type: 'boolean' },
+            valid: { name: 'PV measurements valid', type: 'boolean' },
+            gridPower: { name: 'Grid power', type: 'number', unit: 'W' },
+            batteryPower: { name: 'Battery power', type: 'number', unit: 'W' },
+            surplus: { name: 'PV surplus after reserve and battery discharge', type: 'number', unit: 'W' },
+            status: { name: 'PV monitor status', type: 'string' },
+        };
+        for (const [key, common] of Object.entries(states)) {
+            await this.extendObject(`pvControl.${key}`, {
+                type: 'state',
+                common: { ...common, role: 'value', read: true, write: false },
+                native: {},
+            });
+        }
+        await this.setState('pvControl.enabled', { val: this.config.pvEnabled === true, ack: true });
+        const intervalSeconds = Math.max(30, Number(this.config.pvInterval) || 120);
+        this.pvMonitorTimer = this.setInterval(() => {
+            void this.runPvMonitor().catch((error: unknown) =>
+                this.log.error(`PV monitor failed: ${String(error)}`),
+            );
+        }, intervalSeconds * 1000);
+        await this.runPvMonitor();
+        if (this.config.pvEnabled === true) {
+            this.log.warn('PV automation is configured ON, but actuator commands are intentionally locked in this diagnostic build');
+        }
+    }
+
+    private async readFreshPvValue(id: string, maxAgeMs: number): Promise<number | undefined> {
+        if (!id) {
+            return undefined;
+        }
+        const state = await this.getForeignStateAsync(id);
+        const timestamp = state?.ts;
+        if (!state || typeof state.val !== 'number' || !Number.isFinite(state.val) ||
+            typeof timestamp !== 'number' || timestamp > Date.now() + 10_000 ||
+            Date.now() - timestamp > maxAgeMs) {
+            return undefined;
+        }
+        return state.val;
+    }
+
+    private async runPvMonitor(): Promise<void> {
+        if (this.pvMonitorBusy) {
+            return;
+        }
+        this.pvMonitorBusy = true;
+        try {
+            const ageMs = Math.max(10, Number(this.config.pvMaxDataAge) || 180) * 1000;
+            const grid = await this.readFreshPvValue(this.config.pvGridPowerId || '', ageMs);
+            const battery = await this.readFreshPvValue(this.config.pvBatteryPowerId || '', ageMs);
+            const valid = grid !== undefined && battery !== undefined;
+            await this.setStateChangedAsync('pvControl.valid', { val: valid, ack: true });
+            await this.setStateChangedAsync('pvControl.gridPower', { val: grid ?? null, ack: true });
+            await this.setStateChangedAsync('pvControl.batteryPower', { val: battery ?? null, ack: true });
+            const reserve = Math.max(0, Number(this.config.pvReserve) || 0);
+            const surplus = valid ? Math.max(0, -grid - reserve - Math.max(0, battery)) : null;
+            await this.setStateChangedAsync('pvControl.surplus', { val: surplus, ack: true });
+            const status = !valid ? 'Missing or stale PV measurements; no commands sent'
+                : 'Read-only diagnostics active; miner and relay commands locked';
+            await this.setStateChangedAsync('pvControl.status', { val: status, ack: true });
+            if (status !== this.pvMonitorWarning) {
+                this.log.info(`PV: ${status}`);
+                this.pvMonitorWarning = status;
+            }
+        } finally {
+            this.pvMonitorBusy = false;
+        }
+    }
+
+    /**
+     * Stop mining and disconnect the relay only after fresh, stable evidence of zero
+     * hashrate AND low mains power. A pause command alone is not confirmation.
+     * No relay write occurs if any check fails or the adapter is unloading.
+     */
+    private async safeStopPvMiner(settings: IOBrokerMinerSettings): Promise<void> {
+        const id = settings.settings.id;
+        if (!id || this.pvSafeStops.has(id)) {
+            throw new Error('Safe stop already active or miner ID missing');
+        }
+        const pv = settings.pvControl;
+        if (!pv?.relayStateId || !pv.powerStateId) {
+            throw new Error(`PV safe stop for ${settings.name}: relayStateId and powerStateId required`);
+        }
+        if (settings.settings.minerType !== 'bosMiner') {
+            throw new Error(`PV safe stop only implemented for BOSMiner: ${settings.name}`);
+        }
+        this.pvSafeStops.add(id);
+        const deviceId = this.getDeviceObjectId(settings);
+        const ageMs = Math.max(10, Number(this.config.pvMaxDataAge) || 180) * 1000;
+        const maxWaitMs = 5 * 60_000;
+        const stableMs = 30_000;
+        const maxIdleWatts = 100;
+        const started = Date.now();
+        let stableSince: number | undefined;
+        try {
+            this.log.info(`PV safe stop requested for ${settings.name}; relay stays ON until confirmed`);
+            await this.minerManager.stopMiner(id);
+            // Never assume BOSMiner.pause has stopped the machine: it has no ACK.
+            while (Date.now() - started < maxWaitMs) {
+                if (this.config.pvEnabled !== true) {
+                    throw new Error('PV automation disabled during safe stop');
+                }
+                const [power, hash, seen, relay] = await Promise.all([
+                    this.readFreshPvValue(pv.powerStateId, ageMs),
+                    this.getStateAsync(`${deviceId}.stats.totalHashrate`),
+                    this.getStateAsync(`${deviceId}.info.lastSeen`),
+                    this.getForeignStateAsync(pv.relayStateId),
+                ]);
+                const now = Date.now();
+                const hashFresh = hash && typeof hash.val === 'number' && Number.isFinite(hash.val) &&
+                    typeof hash.ts === 'number' && now - hash.ts <= ageMs && hash.ts <= now + 10_000 &&
+                    seen?.val !== undefined && typeof seen.val === 'number' && now - seen.val <= ageMs;
+                const relayIsOn = relay?.val === pv.relayOnValue &&
+                    typeof relay.ts === 'number' && now - relay.ts <= ageMs;
+                if (!relayIsOn) {
+                    throw new Error(`Relay state unavailable or not ON for ${settings.name}`);
+                }
+                const stopped = power !== undefined && power <= maxIdleWatts &&
+                    hashFresh && hash.val === 0;
+                stableSince = stopped ? (stableSince ?? now) : undefined;
+                const delayMs = Math.max(0, Number(pv.shutdownDelay) || 0) * 1000;
+                if (stableSince !== undefined && now - stableSince >= stableMs && now - started >= delayMs) {
+                    // Recheck the PV enable flag immediately before the relay command.
+                    if (this.config.pvEnabled !== true) {
+                        throw new Error('PV automation disabled before relay shutdown');
+                    }
+                    await this.setForeignStateAsync(pv.relayStateId, !pv.relayOnValue);
+                    this.log.info(`PV safe stop confirmed for ${settings.name}; relay switched OFF`);
+                    return;
+                }
+                await this.delay(5_000);
+            }
+            throw new Error(`PV safe stop timed out for ${settings.name}; relay remains ON`);
+        } catch (error) {
+            this.log.error(`PV safe stop failed for ${settings.name}; relay NOT switched off: ${String(error)}`);
+            throw error;
+        } finally {
+            this.pvSafeStops.delete(id);
         }
     }
 
