@@ -1,43 +1,8 @@
+
 {
   "i18n": true,
   "type": "tabs",
   "items": {
-//    "settings": {
-//      "type": "panel",
-//      "label": "Settings",
-//      "items": {
-//        "option1": {
-//          "type": "checkbox",
-//          "label": "option1",
-//          "newLine": true,
-//          "xs": 12,
-//          "sm": 12,
-//          "md": 6,
-//          "lg": 4,
-//          "xl": 4
-//        },
-//        "option2": {
-//          "type": "text",
-//          "label": "option2",
-//          "newLine": true,
-//          "xs": 12,
-//          "sm": 12,
-//          "md": 6,
-//          "lg": 4,
-//          "xl": 4
-//        },
-//        "pollInterval": {
-//          "type": "number",
-//          "label": "Poll Interval",
-//          "newLine": true,
-//          "xs": 12,
-//          "sm": 12,
-//          "md": 6,
-//          "lg": 4,
-//          "xl": 4
-//        }
-//      }
-//    },
     "_deviceManager": {
       "type": "panel",
       "label": "Devices",
@@ -78,6 +43,90 @@
           "md": 12,
           "lg": 12,
           "xl": 12
+        }
+      }
+    },
+    "_pvControl": {
+      "type": "panel",
+      "label": "PV-Steuerung",
+      "items": {
+        "pvEnabled": {
+          "type": "checkbox",
+          "label": "PV-Automatik aktivieren",
+          "help": "Aktiviert die automatische Leistungsregelung der Miner. Erst nach vollständiger Einrichtung einschalten.",
+          "default": false,
+          "newLine": true,
+          "xs": 12,
+          "sm": 12,
+          "md": 12,
+          "lg": 12
+        },
+        "pvGridPowerId": {
+          "type": "id",
+          "label": "Datenpunkt Netzleistung",
+          "help": "Positive Werte = Netzbezug, negative Werte = Einspeisung.",
+          "newLine": true,
+          "sm": 12,
+          "md": 6
+        },
+        "pvBatteryPowerId": {
+          "type": "id",
+          "label": "Datenpunkt Batterieleistung",
+          "help": "Positive Werte = Entladung, negative Werte = Ladung.",
+          "newLine": true,
+          "sm": 12,
+          "md": 6
+        },
+        "pvInterval": {
+          "type": "number",
+          "label": "Regelintervall (Sekunden)",
+          "default": 120,
+          "min": 30,
+          "max": 600,
+          "newLine": true,
+          "sm": 12,
+          "md": 6
+        },
+        "pvReserve": {
+          "type": "number",
+          "label": "Netzreserve (W)",
+          "default": 200,
+          "min": 0,
+          "max": 2000,
+          "newLine": true,
+          "sm": 12,
+          "md": 6
+        },
+        "pvStartHour": {
+          "type": "number",
+          "label": "Betriebsbeginn (Stunde)",
+          "default": 12,
+          "min": 0,
+          "max": 23,
+          "newLine": true,
+          "sm": 12,
+          "md": 6
+        },
+        "pvEndHour": {
+          "type": "number",
+          "label": "Betriebsende (Stunde)",
+          "default": 20,
+          "min": 1,
+          "max": 24,
+          "newLine": true,
+          "sm": 12,
+          "md": 6
+        },
+        "pvMaxDataAge": {
+          "type": "number",
+          "label": "Maximales Messwertalter (Sekunden)",
+          "help": "Bei veralteten Messwerten wird die PV-Steuerung aus Sicherheitsgründen abgeschaltet.",
+          "default": 180,
+          "min": 30,
+          "max": 3600,
+          "newLine": true,
+          "sm": 12,
+          "md": 6
         }
       }
     }
