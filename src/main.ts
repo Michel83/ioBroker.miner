@@ -241,10 +241,9 @@ export class MinerAdapter extends utils.Adapter {
                             return;
                         }
                         await this.minerManager.startMiner(deviceSettings.settings.id);
-                    } else if (this.config.pvEnabled === true && deviceSettings.pvControl?.enabled === true) {
-                        // Safe relay shutdown is opt-in; manual control stays unchanged when PV is disabled.
-                        await this.safeStopPvMiner(deviceSettings);
                     } else {
+                        // Manual stop only pauses mining.
+                        // Never switch the external relay from control.running.
                         await this.minerManager.stopMiner(deviceSettings.settings.id);
                     }
                     await this.setState(id, { val: state.val, ack: true });

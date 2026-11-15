@@ -371,11 +371,11 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
                         step: 1,
                     },
                     pvRelayStateId: {
-                        type: 'text',
+                        type: 'objectId',
+                        customFilter: { common: { type: 'boolean' } },
                         newLine: true,
                         label: { en: 'Externer Schaltaktor: Datenpunkt-ID', de: 'Externer Schaltaktor: Datenpunkt-ID' },
                         hidden: "data.category !== 'miner'",
-                        trim: true,
                     },
                     pvRelayOnValue: {
                         type: 'checkbox',
@@ -408,11 +408,11 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
                         step: 1,
                     },
                     pvPowerStateId: {
-                        type: 'text',
+                        type: 'objectId',
+                        customFilter: { common: { type: 'number' } },
                         newLine: true,
                         label: { en: 'Gemessene Leistung: Datenpunkt-ID', de: 'Gemessene Leistung: Datenpunkt-ID' },
                         hidden: "data.category !== 'miner'",
-                        trim: true,
                     },
                     pvRunningStateId: {
                         type: 'text',
