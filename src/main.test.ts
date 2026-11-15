@@ -233,7 +233,9 @@ interface CustomFeatureTestAdapter {
         hasMiner: (id: string) => boolean;
         withExclusiveMiner: (
             id: string,
-            operation: (miner: { setCustomFeature: (id: string, value: unknown) => Promise<unknown> }) => Promise<unknown>,
+            operation: (miner: {
+                setCustomFeature: (id: string, value: unknown) => Promise<unknown>;
+            }) => Promise<unknown>,
         ) => Promise<unknown>;
     };
     extendObject: (id: string, obj: { type: string; common: Partial<ioBroker.StateCommon> }) => Promise<void>;
