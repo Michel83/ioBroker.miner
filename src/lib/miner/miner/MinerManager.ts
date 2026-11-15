@@ -11,6 +11,45 @@ const logger = Logger.getLogger('MinerManager');
 export class MinerManager {
     private readonly miners: Miner<MinerSettings>[] = [];
 
+    // Serialize control commands per miner; a failure must not block later commands.
+    private readonly commandTails = new Map<string, Promise<void>>();
+
+    private async runSerialized<T>(id: string, operation: () => Promise<T>): Promise<T> {
+        const previous = this.commandTails.get(id) ?? Promise.resolve();
+        let release!: () => void;
+        const tail = new Promise<void>(resolve => {
+            release = resolve;
+        });
+        this.commandTails.set(id, tail);
+        await previous;
+        try {
+            return await operation();
+        } finally {
+            release();
+            if (this.commandTails.get(id) === tail) {
+                this.commandTails.delete(id);
+            }
+        }
+    }
+
+    /**
+     * Reserve exclusive access to a miner across a multi-step control operation.
+     * Use the provided miner rather than calling other manager methods inside the callback.
+     */
+    public async withExclusiveMiner<T>(
+        id: string,
+        operation: (miner: Miner<MinerSettings>) => Promise<T>,
+    ): Promise<T> {
+        return this.runSerialized(id, async () => {
+            const miner = this.getMinerById(id);
+            if (!miner) {
+                throw new Error(`Miner with id ${id} not found`);
+            }
+            return operation(miner);
+        });
+    }
+
+
     /**
      *
      * @param settings - the miner configuration to initialize
@@ -109,7 +148,7 @@ export class MinerManager {
         }
 
         try {
-            await miner.start();
+            await this.runSerialized(id, () => miner.start());
         } catch (e) {
             logger.error(`[startMiner] failed to start miner with id ${id}: ${String(e)}`);
             throw e;
@@ -130,7 +169,7 @@ export class MinerManager {
         }
 
         try {
-            await miner.stop();
+            await this.runSerialized(id, () => miner.stop());
         } catch (e) {
             logger.error(`[stopMiner] failed to stop miner with id ${id}: ${String(e)}`);
             throw e;
@@ -153,7 +192,7 @@ export class MinerManager {
         }
 
         try {
-            await miner.setProfile(profile);
+            await this.runSerialized(id, () => miner.setProfile(profile));
         } catch (e) {
             logger.error(`[setProfile] failed to set profile "${profile}" on miner with id ${id}: ${String(e)}`);
         }
@@ -175,7 +214,7 @@ export class MinerManager {
         }
 
         try {
-            await miner.setPowerTarget(powerTarget);
+            await this.runSerialized(id, () => miner.setPowerTarget(powerTarget));
         } catch (e) {
             logger.error(
                 `[setPowerTarget] failed to set power target ${powerTarget} W on miner with id ${id}: ${String(e)}`,
