@@ -1250,7 +1250,8 @@ export class MinerAdapter extends utils.Adapter {
         let pausedAt = 0;
         try {
             this.log.info(`PV safe stop requested for ${settings.name}; relay stays ON until confirmed`);
-            await this.minerManager.stopMiner(id);
+            await this.minerManager.withExclusiveMiner(id, async miner => {
+                await miner.stop();
             pausedAt = Date.now();
             // A successful pause command is not proof of stopped hardware.
             while (Date.now() - started < maxWaitMs) {
@@ -1335,6 +1336,7 @@ export class MinerAdapter extends utils.Adapter {
                 await this.delay(5_000);
             }
             throw new Error(`PV safe stop timed out for ${settings.name}; relay remains ON`);
+            });
         } catch (error) {
             this.log.error(`PV safe stop failed for ${settings.name}; relay NOT switched off: ${String(error)}`);
             throw error;
