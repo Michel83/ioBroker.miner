@@ -27,7 +27,7 @@ import type {
     XMRigSettings,
 } from './miner/model/MinerSettings';
 import { BOS_DEFAULT_PASSWORD, BOS_DEFAULT_USERNAME, minerTypeKeys } from './miner/model/MinerSettings';
-import type { IOBrokerDeviceSettings, IOBrokerMinerSettings } from '../miner/model/IOBrokerMinerSettings';
+import type { IOBrokerDeviceSettings, IOBrokerMinerSettings, MinerPvControlSettings } from '../miner/model/IOBrokerMinerSettings';
 import { decryptDeviceSettings, isMiner } from '../miner/model/IOBrokerMinerSettings';
 import type { PartialDeep } from 'type-fest';
 import { createMiner } from './miner/miner/MinerFactory';
@@ -325,6 +325,95 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
                             'after this many days of filter runtime the adapter sets custom.filter.cleanDue and raises a notification. Reset the reminder after cleaning the filter.',
                         hidden: "data.category !== 'miner' || data.minerType != 'avalonMiner'",
                     },
+                    // PV surplus configuration (per miner; independent from firmware settings)
+                    pvEnabled: {
+                        type: 'checkbox',
+                        newLine: true,
+                        label: { en: 'PV-Steuerung für diesen Miner aktivieren', de: 'PV-Steuerung für diesen Miner aktivieren' },
+                        hidden: "data.category !== 'miner'",
+                    },
+                    pvPriority: {
+                        type: 'number',
+                        newLine: true,
+                        label: { en: 'PV-Priorität (1 = zuerst)', de: 'PV-Priorität (1 = zuerst)' },
+                        hidden: "data.category !== 'miner'",
+                        min: 1,
+                        step: 1,
+                    },
+                    pvMinPower: {
+                        type: 'number',
+                        newLine: true,
+                        label: { en: 'PV-Mindestleistung (W)', de: 'PV-Mindestleistung (W)' },
+                        hidden: "data.category !== 'miner'",
+                        min: 0,
+                        step: 1,
+                    },
+                    pvMaxPower: {
+                        type: 'number',
+                        newLine: true,
+                        label: { en: 'PV-Maximalleistung (W)', de: 'PV-Maximalleistung (W)' },
+                        hidden: "data.category !== 'miner'",
+                        min: 0,
+                        step: 1,
+                    },
+                    pvPowerOffset: {
+                        type: 'number',
+                        newLine: true,
+                        label: { en: 'PV-Leistungsaufschlag (W)', de: 'PV-Leistungsaufschlag (W)' },
+                        hidden: "data.category !== 'miner'",
+                        step: 1,
+                    },
+                    pvRelayStateId: {
+                        type: 'text',
+                        newLine: true,
+                        label: { en: 'Externer Schaltaktor: Datenpunkt-ID', de: 'Externer Schaltaktor: Datenpunkt-ID' },
+                        hidden: "data.category !== 'miner'",
+                        trim: true,
+                    },
+                    pvRelayOnValue: {
+                        type: 'checkbox',
+                        newLine: true,
+                        label: { en: 'Schaltaktor: EIN-Wert ist true', de: 'Schaltaktor: EIN-Wert ist true' },
+                        hidden: "data.category !== 'miner'",
+                    },
+                    pvStartupDelay: {
+                        type: 'number',
+                        newLine: true,
+                        label: { en: 'Wartezeit nach Einschalten (s)', de: 'Wartezeit nach Einschalten (s)' },
+                        hidden: "data.category !== 'miner'",
+                        min: 0,
+                        step: 1,
+                    },
+                    pvRestartDelay: {
+                        type: 'number',
+                        newLine: true,
+                        label: { en: 'Mindestens aus bis Neustart (s)', de: 'Mindestens aus bis Neustart (s)' },
+                        hidden: "data.category !== 'miner'",
+                        min: 0,
+                        step: 1,
+                    },
+                    pvShutdownDelay: {
+                        type: 'number',
+                        newLine: true,
+                        label: { en: 'Wartezeit bis Relais AUS (s)', de: 'Wartezeit bis Relais AUS (s)' },
+                        hidden: "data.category !== 'miner'",
+                        min: 0,
+                        step: 1,
+                    },
+                    pvPowerStateId: {
+                        type: 'text',
+                        newLine: true,
+                        label: { en: 'Gemessene Leistung: Datenpunkt-ID', de: 'Gemessene Leistung: Datenpunkt-ID' },
+                        hidden: "data.category !== 'miner'",
+                        trim: true,
+                    },
+                    pvRunningStateId: {
+                        type: 'text',
+                        newLine: true,
+                        label: { en: 'Betriebsrückmeldung: Datenpunkt-ID', de: 'Betriebsrückmeldung: Datenpunkt-ID' },
+                        hidden: "data.category !== 'miner'",
+                        trim: true,
+                    },
                     enabled: {
                         type: 'checkbox',
                         newLine: true,
@@ -351,6 +440,18 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
                         (existingSettings.settings as PartialDeep<AvalonMinerSettings>).filterCleanIntervalDays ??
                         DEFAULT_FILTER_CLEAN_INTERVAL_DAYS,
                     enabled: existingSettings.enabled,
+                    pvEnabled: existingSettings.pvControl?.enabled ?? false,
+                    pvPriority: existingSettings.pvControl?.priority ?? 1,
+                    pvMinPower: existingSettings.pvControl?.minPower ?? 0,
+                    pvMaxPower: existingSettings.pvControl?.maxPower ?? 0,
+                    pvPowerOffset: existingSettings.pvControl?.powerOffset ?? 0,
+                    pvRelayStateId: existingSettings.pvControl?.relayStateId ?? '',
+                    pvRelayOnValue: existingSettings.pvControl?.relayOnValue ?? true,
+                    pvStartupDelay: existingSettings.pvControl?.startupDelay ?? 0,
+                    pvRestartDelay: existingSettings.pvControl?.restartDelay ?? 180,
+                    pvShutdownDelay: existingSettings.pvControl?.shutdownDelay ?? 0,
+                    pvPowerStateId: existingSettings.pvControl?.powerStateId ?? '',
+                    pvRunningStateId: existingSettings.pvControl?.runningStateId ?? '',
                 },
                 title,
             },
@@ -601,12 +702,43 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
             }
         }
 
+        // Keep PV settings separate from the firmware-specific MinerSettings.
+        // Old miners without a pvControl object remain disabled by default.
+        const finiteNumber = (value: unknown, fallback: number): number =>
+            typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+        const nonNegative = (value: unknown, fallback: number): number =>
+            Math.max(0, finiteNumber(value, fallback));
+        const pvMinPower = nonNegative(result.pvMinPower, 0);
+        const pvMaxPower = nonNegative(result.pvMaxPower, 0);
+        if (result.pvEnabled === true && (pvMinPower <= 0 || pvMaxPower < pvMinPower)) {
+            await context.showMessage({
+                en: 'PV control: maximum power must be at least the minimum, and minimum must be above zero.',
+                de: 'PV-Steuerung: Mindestleistung muss größer als null sein und Maximalleistung mindestens so hoch.',
+            });
+            return undefined;
+        }
+        const pvControl: MinerPvControlSettings = {
+            enabled: result.pvEnabled === true,
+            priority: Math.max(1, Math.floor(finiteNumber(result.pvPriority, 1))),
+            minPower: pvMinPower,
+            maxPower: pvMaxPower,
+            powerOffset: finiteNumber(result.pvPowerOffset, 0),
+            relayStateId: typeof result.pvRelayStateId === 'string' ? result.pvRelayStateId.trim() : '',
+            relayOnValue: result.pvRelayOnValue !== false,
+            startupDelay: nonNegative(result.pvStartupDelay, 0),
+            restartDelay: nonNegative(result.pvRestartDelay, 180),
+            shutdownDelay: nonNegative(result.pvShutdownDelay, 0),
+            powerStateId: typeof result.pvPowerStateId === 'string' ? result.pvPowerStateId.trim() : '',
+            runningStateId: typeof result.pvRunningStateId === 'string' ? result.pvRunningStateId.trim() : '',
+        };
+
         const settings: IOBrokerMinerSettings = {
             category: result.category,
             name: result.name,
             mac: result.mac,
             enabled: result.enabled,
             settings: minerSettings,
+            pvControl,
         };
 
         return settings;
