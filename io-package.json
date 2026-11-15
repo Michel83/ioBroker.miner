@@ -236,7 +236,20 @@
       "type": "state",
       "common": {
         "role": "info.status",
-        "name": "List of reachable miners",
+        "name": "Adapter status",
+        "type": "string",
+        "read": true,
+        "write": false,
+        "def": ""
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.connectedMiners",
+      "type": "state",
+      "common": {
+        "role": "text",
+        "name": "Reachable miners",
         "type": "string",
         "read": true,
         "write": false,
