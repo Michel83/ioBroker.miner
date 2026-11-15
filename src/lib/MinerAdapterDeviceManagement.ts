@@ -27,7 +27,11 @@ import type {
     XMRigSettings,
 } from './miner/model/MinerSettings';
 import { BOS_DEFAULT_PASSWORD, BOS_DEFAULT_USERNAME, minerTypeKeys } from './miner/model/MinerSettings';
-import type { IOBrokerDeviceSettings, IOBrokerMinerSettings, MinerPvControlSettings } from '../miner/model/IOBrokerMinerSettings';
+import type {
+    IOBrokerDeviceSettings,
+    IOBrokerMinerSettings,
+    MinerPvControlSettings,
+} from '../miner/model/IOBrokerMinerSettings';
 import { decryptDeviceSettings, isMiner } from '../miner/model/IOBrokerMinerSettings';
 import type { PartialDeep } from 'type-fest';
 import { createMiner } from './miner/miner/MinerFactory';
@@ -329,7 +333,10 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
                     pvEnabled: {
                         type: 'checkbox',
                         newLine: true,
-                        label: { en: 'PV-Steuerung für diesen Miner aktivieren', de: 'PV-Steuerung für diesen Miner aktivieren' },
+                        label: {
+                            en: 'PV-Steuerung für diesen Miner aktivieren',
+                            de: 'PV-Steuerung für diesen Miner aktivieren',
+                        },
                         hidden: "data.category !== 'miner'",
                     },
                     pvPriority: {
@@ -706,8 +713,7 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
         // Old miners without a pvControl object remain disabled by default.
         const finiteNumber = (value: unknown, fallback: number): number =>
             typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-        const nonNegative = (value: unknown, fallback: number): number =>
-            Math.max(0, finiteNumber(value, fallback));
+        const nonNegative = (value: unknown, fallback: number): number => Math.max(0, finiteNumber(value, fallback));
         const pvMinPower = nonNegative(result.pvMinPower, 0);
         const pvMaxPower = nonNegative(result.pvMaxPower, 0);
         if (result.pvEnabled === true && (pvMinPower <= 0 || pvMaxPower < pvMinPower)) {

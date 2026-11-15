@@ -1115,13 +1115,13 @@ export class MinerAdapter extends utils.Adapter {
         await this.setState('pvControl.enabled', { val: this.config.pvEnabled === true, ack: true });
         const intervalSeconds = Math.max(30, Number(this.config.pvInterval) || 120);
         this.pvMonitorTimer = this.setInterval(() => {
-            void this.runPvMonitor().catch((error: unknown) =>
-                this.log.error(`PV monitor failed: ${String(error)}`),
-            );
+            void this.runPvMonitor().catch((error: unknown) => this.log.error(`PV monitor failed: ${String(error)}`));
         }, intervalSeconds * 1000);
         await this.runPvMonitor();
         if (this.config.pvEnabled === true) {
-            this.log.warn('PV automation is configured ON, but actuator commands are intentionally locked in this diagnostic build');
+            this.log.warn(
+                'PV automation is configured ON, but actuator commands are intentionally locked in this diagnostic build',
+            );
         }
     }
 
@@ -1131,9 +1131,14 @@ export class MinerAdapter extends utils.Adapter {
         }
         const state = await this.getForeignStateAsync(id);
         const timestamp = state?.ts;
-        if (!state || typeof state.val !== 'number' || !Number.isFinite(state.val) ||
-            typeof timestamp !== 'number' || timestamp > Date.now() + 10_000 ||
-            Date.now() - timestamp > maxAgeMs) {
+        if (
+            !state ||
+            typeof state.val !== 'number' ||
+            !Number.isFinite(state.val) ||
+            typeof timestamp !== 'number' ||
+            timestamp > Date.now() + 10_000 ||
+            Date.now() - timestamp > maxAgeMs
+        ) {
             return undefined;
         }
         return state.val;
@@ -1155,7 +1160,8 @@ export class MinerAdapter extends utils.Adapter {
             const reserve = Math.max(0, Number(this.config.pvReserve) || 0);
             const surplus = valid ? Math.max(0, -grid - reserve - Math.max(0, battery)) : null;
             await this.setStateChangedAsync('pvControl.surplus', { val: surplus, ack: true });
-            const status = !valid ? 'Missing or stale PV measurements; no commands sent'
+            const status = !valid
+                ? 'Missing or stale PV measurements; no commands sent'
                 : 'Read-only diagnostics active; miner and relay commands locked';
             await this.setStateChangedAsync('pvControl.status', { val: status, ack: true });
             if (status !== this.pvMonitorWarning) {
@@ -1207,16 +1213,22 @@ export class MinerAdapter extends utils.Adapter {
                     this.getForeignStateAsync(pv.relayStateId),
                 ]);
                 const now = Date.now();
-                const hashFresh = hash && typeof hash.val === 'number' && Number.isFinite(hash.val) &&
-                    typeof hash.ts === 'number' && now - hash.ts <= ageMs && hash.ts <= now + 10_000 &&
-                    seen?.val !== undefined && typeof seen.val === 'number' && now - seen.val <= ageMs;
-                const relayIsOn = relay?.val === pv.relayOnValue &&
-                    typeof relay.ts === 'number' && now - relay.ts <= ageMs;
+                const hashFresh =
+                    hash &&
+                    typeof hash.val === 'number' &&
+                    Number.isFinite(hash.val) &&
+                    typeof hash.ts === 'number' &&
+                    now - hash.ts <= ageMs &&
+                    hash.ts <= now + 10_000 &&
+                    seen?.val !== undefined &&
+                    typeof seen.val === 'number' &&
+                    now - seen.val <= ageMs;
+                const relayIsOn =
+                    relay?.val === pv.relayOnValue && typeof relay.ts === 'number' && now - relay.ts <= ageMs;
                 if (!relayIsOn) {
                     throw new Error(`Relay state unavailable or not ON for ${settings.name}`);
                 }
-                const stopped = power !== undefined && power <= maxIdleWatts &&
-                    hashFresh && hash.val === 0;
+                const stopped = power !== undefined && power <= maxIdleWatts && hashFresh && hash.val === 0;
                 stableSince = stopped ? (stableSince ?? now) : undefined;
                 const delayMs = Math.max(0, Number(pv.shutdownDelay) || 0) * 1000;
                 if (stableSince !== undefined && now - stableSince >= stableMs && now - started >= delayMs) {
