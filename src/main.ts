@@ -90,7 +90,15 @@ export class MinerAdapter extends utils.Adapter {
         // The adapter is operational even when all PV-controlled miners are offline.
         // Keep the admin connection indicator independent of miner availability.
         await this.extendObject('info.connection', {
-            common: { type: 'string', role: 'info.status', name: 'Adapter status' },
+            type: 'state',
+            common: {
+                type: 'boolean',
+                role: 'indicator.connected',
+                name: 'Adapter connection',
+                read: true,
+                write: false,
+            },
+            native: {},
         });
         await this.extendObject('info.connectedMiners', {
             type: 'state',
@@ -103,7 +111,7 @@ export class MinerAdapter extends utils.Adapter {
             },
             native: {},
         });
-        await this.setState('info.connection', 'Adapter running', true);
+        await this.setState('info.connection', true, true);
         await this.setState('info.connectedMiners', '', true);
 
         // Initialize your adapter here
@@ -134,7 +142,7 @@ export class MinerAdapter extends utils.Adapter {
                 await this.deviceManagement.close();
             }
 
-            await this.setState('info.connection', '', true);
+            await this.setState('info.connection', false, true);
             await this.setState('info.connectedMiners', '', true);
 
             callback();
