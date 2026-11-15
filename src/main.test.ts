@@ -228,7 +228,14 @@ describe('device manager latest version', () => {
 interface CustomFeatureTestAdapter {
     namespace: string;
     log: { info: (msg: string) => void; warn: (msg: string) => void };
-    minerManager: { getMiner: (id: string) => object | undefined };
+    minerManager: {
+        getMiner: (id: string) => object | undefined;
+        hasMiner: (id: string) => boolean;
+        withExclusiveMiner: (
+            id: string,
+            operation: (miner: { setCustomFeature: (id: string, value: unknown) => Promise<unknown> }) => Promise<unknown>,
+        ) => Promise<unknown>;
+    };
     extendObject: (id: string, obj: { type: string; common: Partial<ioBroker.StateCommon> }) => Promise<void>;
     getObjectAsync: (id: string) => Promise<object | null>;
     getForeignObjectsAsync: (pattern: string) => Promise<Record<string, object>>;
@@ -401,7 +408,7 @@ describe('custom features', () => {
         adapter.minerManager = {
             getMiner: id => (id === 'dev' ? { setCustomFeature } : undefined),
             hasMiner: id => id === 'dev',
-            withExclusiveMiner: async (id, operation) => {
+            withExclusiveMiner: (id, operation) => {
                 if (id !== 'dev') {
                     throw new Error('Miner not found');
                 }
