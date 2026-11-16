@@ -774,9 +774,10 @@ describe('PV shutdown with slow independent power telemetry', () => {
         const confirmation = new PvShutdownConfirmation();
         const results: boolean[] = [];
         const intervalMs = intervalSeconds * 1000;
-        const end = (powerReadings.length - 1) * intervalMs;
+        // Three distinct samples are necessary, but never sufficient before 30s of stability.
+        const end = Math.max(30_000, (powerReadings.length - 1) * intervalMs);
         for (let elapsed = 0; elapsed <= end; elapsed += 5_000) {
-            const readingIndex = Math.floor(elapsed / intervalMs);
+            const readingIndex = Math.min(powerReadings.length - 1, Math.floor(elapsed / intervalMs));
             const powerTimestamp = base + readingIndex * intervalMs;
             const timestamp = base + elapsed;
             const measurements: PvShutdownMeasurements = {
