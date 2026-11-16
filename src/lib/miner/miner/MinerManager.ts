@@ -107,7 +107,13 @@ export class MinerManager {
         logger.log('[closeAll] unloading all miners');
 
         for (const miner of [...this.miners]) {
-            await this.close(miner.settings.id);
+            const id = miner.settings.id;
+            if (id !== undefined) {
+                await this.close(id);
+            } else {
+                await miner.close();
+                this.miners.splice(this.miners.indexOf(miner), 1);
+            }
         }
     }
 
