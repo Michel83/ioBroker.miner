@@ -75,4 +75,69 @@ describe('V2.43 read-only start and stop eligibility', () => {
             }).s9ToS19CandidateSince,
         ).to.equal(undefined);
     });
+    it('resets S9 low-power timer when telemetry is missing', () => {
+        const input = { ...base, s9Running: true, availableWatts: 499 };
+        const first = evaluatePvRunEligibilityV243(input);
+        const missing = evaluatePvRunEligibilityV243({
+            ...input,
+            now: 180000,
+            availableWatts: undefined,
+            s9LowPowerSince: first.s9LowPowerSince,
+        });
+        expect(missing.s9).to.equal('unavailable');
+        expect(missing.s9LowPowerSince).to.equal(undefined);
+        const resumed = evaluatePvRunEligibilityV243({
+            ...input,
+            now: 220000,
+            s9LowPowerSince: missing.s9LowPowerSince,
+        });
+        expect(resumed.s9).to.equal('low-power-wait');
+        expect(resumed.s9LowPowerSince).to.equal(220000);
+    });
+
+    it('resets S19 low-power timer when threshold recovers', () => {
+        const input = { ...base, s19Running: true, availableWatts: 1449 };
+        const first = evaluatePvRunEligibilityV243(input);
+        const recovered = evaluatePvRunEligibilityV243({
+            ...input,
+            now: 180000,
+            availableWatts: 1450,
+            s19LowPowerSince: first.s19LowPowerSince,
+        });
+        expect(recovered.s19LowPowerSince).to.equal(undefined);
+        const resumed = evaluatePvRunEligibilityV243({
+            ...input,
+            now: 220000,
+            s19LowPowerSince: recovered.s19LowPowerSince,
+        });
+        expect(resumed.s19).to.equal('low-power-wait');
+    });
+
+    it('does not reuse a switch timer after export drops below threshold', () => {
+        const input = { ...base, s9Running: true };
+        const first = evaluatePvRunEligibilityV243(input);
+        const interrupted = evaluatePvRunEligibilityV243({
+            ...input,
+            now: 180000,
+            gridPowerWatts: -299,
+            s9ToS19CandidateSince: first.s9ToS19CandidateSince,
+        });
+        expect(interrupted.s9ToS19CandidateSince).to.equal(undefined);
+        const resumed = evaluatePvRunEligibilityV243({
+            ...input,
+            now: 220000,
+            s9ToS19CandidateSince: interrupted.s9ToS19CandidateSince,
+        });
+        expect(resumed.s19).to.equal('switch-stabilizing');
+    });
+
+    it('starts fresh timers after diagnostic restart without prior history', () => {
+        const input = { ...base, s9Running: true, availableWatts: 499, now: 900000 };
+        const afterRestart = evaluatePvRunEligibilityV243(input);
+        expect(afterRestart.s9).to.equal('low-power-wait');
+        expect(afterRestart.s9LowPowerSince).to.equal(900000);
+        expect(afterRestart.s19).to.equal('switch-stabilizing');
+        expect(afterRestart.s9ToS19CandidateSince).to.equal(900000);
+    });
+
 });
