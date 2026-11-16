@@ -2,13 +2,16 @@ import { decidePvTargetV243, type PvMinerKindV243, type PvTargetDecisionV243 } f
 
 /** In-memory observation only: never authorizes a miner command or relay operation. */
 export class PvTargetDiagnosticV243 {
-    private readonly history = new Map<PvMinerKindV243, {
-        target: number;
-        observedAt: number;
-        lastChangeAt?: number;
-        candidateWatts?: number;
-        candidateSince?: number;
-    }>();
+    private readonly history = new Map<
+        PvMinerKindV243,
+        {
+            target: number;
+            observedAt: number;
+            lastChangeAt?: number;
+            candidateWatts?: number;
+            candidateSince?: number;
+        }
+    >();
 
     public reset(miner: PvMinerKindV243): void {
         this.history.delete(miner);

@@ -26,7 +26,9 @@ describe('V2.43 read-only target diagnostic history', () => {
         const d = new PvTargetDiagnosticV243();
         d.evaluate({ ...s19, now: 100000 });
         d.evaluate({ ...s19, now: 280000 });
-        expect(d.evaluate({ ...s19, effectiveGridWatts: NaN, now: 300000 }).reason).to.equal('invalid-or-stale-measurement');
+        expect(d.evaluate({ ...s19, effectiveGridWatts: NaN, now: 300000 }).reason).to.equal(
+            'invalid-or-stale-measurement',
+        );
         expect(d.evaluate({ ...s19, now: 480000 }).reason).to.equal('s19-initial-observation');
     });
     it('enforces the 120 second interval after observed S9 target changes', () => {
