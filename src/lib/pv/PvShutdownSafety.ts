@@ -469,3 +469,38 @@ export function isPvRestartUnlockCandidate(values: PvRestartUnlockCandidate): bo
         isPvStartReady(values.readiness)
     );
 }
+
+/**
+ * Stage 2 of PV restart: evaluate fresh post-power-on evidence.
+ * Stage 1 (isPvRestartAllowed) must have succeeded before relay ON.
+ * The relay-OFF condition is deliberately NOT required here because the relay
+ * must now be ON. Diagnostic only: no lock mutation or hardware commands.
+ */
+export interface PvPostPowerOnApproval {
+    prePowerOnApproved: boolean;
+    relayPoweredOnAt: number | undefined;
+    restart: PvRestartMeasurements;
+    readiness: PvStartReadiness;
+}
+
+export function isPvPostPowerOnApproved(values: PvPostPowerOnApproval): boolean {
+    const poweredOnAt = values.relayPoweredOnAt;
+    const restart = values.restart;
+    const readiness = values.readiness;
+    return (
+        values.prePowerOnApproved &&
+        poweredOnAt !== undefined &&
+        Number.isFinite(poweredOnAt) &&
+        readiness.relayEnabledAt === poweredOnAt &&
+        readiness.relayTimestamp !== undefined &&
+        readiness.relayTimestamp > poweredOnAt &&
+        restart.now === readiness.now &&
+        restart.gridTimestamp !== undefined &&
+        restart.gridTimestamp > poweredOnAt &&
+        restart.batteryTimestamp !== undefined &&
+        restart.batteryTimestamp > poweredOnAt &&
+        // Reuse the export/age/delay checks, but not the historical OFF requirement.
+        isPvRestartAllowed({ ...restart, relayConfirmedOff: true }) &&
+        isPvStartReady(readiness)
+    );
+}
