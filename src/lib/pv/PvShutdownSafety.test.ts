@@ -906,7 +906,6 @@ describe('PV relay OFF: three independent post-command power readings', () => {
     });
 });
 
-
 describe('PV relay OFF missing telemetry and restart lock diagnostics', () => {
     const requestedAt = 1_800_000_000_000;
     const maxAgeMs = 180_000;
@@ -914,9 +913,7 @@ describe('PV relay OFF missing telemetry and restart lock diagnostics', () => {
     it('never confirms a relay shutdown when no new power measurements arrive', () => {
         const confirmation = new PvRelayOffPowerConfirmation(requestedAt);
         for (let elapsed = 5000; elapsed <= 600_000; elapsed += 5000) {
-            expect(
-                confirmation.update(0, requestedAt, true, requestedAt + elapsed, maxAgeMs),
-            ).to.equal(false);
+            expect(confirmation.update(0, requestedAt, true, requestedAt + elapsed, maxAgeMs)).to.equal(false);
         }
     });
 
@@ -924,9 +921,7 @@ describe('PV relay OFF missing telemetry and restart lock diagnostics', () => {
         const confirmation = new PvRelayOffPowerConfirmation(requestedAt);
         const powerTimestamp = requestedAt + 10_000;
         for (let elapsed = 10_000; elapsed <= 600_000; elapsed += 5000) {
-            expect(
-                confirmation.update(0, powerTimestamp, true, requestedAt + elapsed, maxAgeMs),
-            ).to.equal(false);
+            expect(confirmation.update(0, powerTimestamp, true, requestedAt + elapsed, maxAgeMs)).to.equal(false);
         }
     });
 
