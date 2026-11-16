@@ -298,7 +298,7 @@ export class MinerAdapter extends utils.Adapter {
                         return;
                     }
 
-                    if (this.pvSafeStops.has(deviceSettings.settings.id) || this.pvShuttingDown) {
+                    if (!isPvMinerCommandAllowed(deviceSettings.settings.id, this.pvSafeStops, this.pvRelayOffMiners, this.pvShuttingDown)) {
                         this.log.warn(
                             `setProfile blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`,
                         );
@@ -385,7 +385,7 @@ export class MinerAdapter extends utils.Adapter {
             this.log.warn(`cannot set ${featureId} on device ${deviceSettings.name}: the device is disabled`);
             return;
         }
-        if (this.pvSafeStops.has(minerId) || this.pvShuttingDown) {
+        if (!isPvMinerCommandAllowed(minerId, this.pvSafeStops, this.pvRelayOffMiners, this.pvShuttingDown)) {
             this.log.warn(
                 `custom feature ${featureId} blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`,
             );
@@ -394,7 +394,7 @@ export class MinerAdapter extends utils.Adapter {
 
         try {
             const applied = await this.minerManager.withExclusiveMiner(minerId, miner => {
-                if (this.pvSafeStops.has(minerId) || this.pvShuttingDown) {
+                if (!isPvMinerCommandAllowed(minerId, this.pvSafeStops, this.pvRelayOffMiners, this.pvShuttingDown)) {
                     throw new Error('PV safe stop or adapter shutdown active');
                 }
                 return miner.setCustomFeature(featureId, value);
