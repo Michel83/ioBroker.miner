@@ -26,6 +26,18 @@ declare global {
             /** Observed S19 power target state, read-only V2.43 diagnostic input. */
             pvS19TargetStateId?: string;
 
+            /** S9 running state (read-only). */
+            pvS9RunningStateId?: string;
+
+            /** S19 running state (read-only). */
+            pvS19RunningStateId?: string;
+
+            /** S9 actual power in watts (read-only). */
+            pvS9ActualPowerId?: string;
+
+            /** S19 actual power in watts (read-only). */
+            pvS19ActualPowerId?: string;
+
             /** PV regulation interval in seconds (default: 120). */
             pvInterval?: number;
 
