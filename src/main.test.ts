@@ -793,3 +793,101 @@ describe('custom feature notifications', () => {
         expect(notifications).to.have.length(2);
     });
 });
+
+
+describe('PV VIS integration: two miners and lost relay feedback (no hardware)', () => {
+    it('updates both miners through real monitor cycles, fails closed on S19 loss, and never unlocks', async () => {
+        const adapter = createTestAdapter() as unknown as {
+            config: Record<string, unknown>;
+            getDevicesAsync: () => Promise<ioBroker.DeviceObject[]>;
+            getForeignStateAsync: (id: string) => Promise<{
+                val: number | boolean; ack: boolean; ts: number;
+            } | null>;
+            getStateAsync: (id: string) => Promise<{ val: unknown } | null>;
+            setState: (id: string, state: { val: unknown; ack: boolean }) => Promise<void>;
+            runPvMonitor: () => Promise<void>;
+            pvRelayOffMiners: Set<string>;
+            pvSafeStops: Set<string>;
+        };
+        const now = Date.now();
+        const foreign = new Map<string, { val: number | boolean; ack: boolean; ts: number }>([
+            ['relay.s9', { val: false, ack: true, ts: now }],
+            ['relay.s19', { val: false, ack: true, ts: now }],
+            ['power.s9', { val: 0, ack: true, ts: now }],
+            ['power.s19', { val: 0, ack: true, ts: now }],
+            ['pv.grid', { val: -4500, ack: true, ts: now }],
+            ['pv.battery', { val: 0, ack: true, ts: now }],
+        ]);
+        const writes = new Map<string, unknown>();
+        const devices = (['s9', 's19'] as const).map((id) => ({
+            _id: `miner.0.miner.${id}`,
+            native: {
+                category: 'miner',
+                name: id,
+                settings: { id, minerType: 'bosMiner' },
+                pvControl: {
+                    enabled: true,
+                    relayStateId: `relay.${id}`,
+                    relayOnValue: true,
+                    powerStateId: `power.${id}`,
+                    restartDelay: 180,
+                    minPower: id === 's9' ? 500 : 1800,
+                },
+            },
+        })) as unknown as ioBroker.DeviceObject[];
+        adapter.config = {
+            checkForUpdates: false,
+            pvMaxDataAge: 15,
+            pvGridPowerId: 'pv.grid',
+            pvBatteryPowerId: 'pv.battery',
+            pvReserve: 200,
+        };
+        adapter.getDevicesAsync = async () => devices;
+        adapter.getForeignStateAsync = async id => foreign.get(id) ?? null;
+        adapter.getStateAsync = async id => {
+            if (!id.endsWith('.lastSafeStop')) return null;
+            const minerId = id.includes('miner.s9.') ? 's9' : 's19';
+            return {
+                val: JSON.stringify({
+                    minerId,
+                    relayStateId: `relay.${minerId}`,
+                    stoppedAt: now - 60_000,
+                    relayOffConfirmed: true,
+                }),
+            };
+        };
+        adapter.setState = async (id, state) => {
+            writes.set(id, state.val);
+        };
+        adapter.pvRelayOffMiners.add('s9');
+        adapter.pvRelayOffMiners.add('s19');
+
+        await adapter.runPvMonitor();
+        for (const id of ['s9', 's19']) {
+            const prefix = `pvControl.miners.miner.${id}`;
+            expect(writes.get(`${prefix}.relayOn`)).to.equal(false);
+            expect(writes.get(`${prefix}.restartCountdown`)).to.be.a('number');
+            expect(writes.get(`${prefix}.restartLocked`)).to.equal(true);
+            expect(writes.get(`${prefix}.safetyReason`)).to.equal('restart_delay_running');
+        }
+
+        // S19 loses its acknowledgement while S9 continues normally.
+        foreign.set('relay.s19', { val: false, ack: false, ts: now });
+        await adapter.runPvMonitor();
+        expect(writes.get('pvControl.miners.miner.s19.relayOn')).to.equal(null);
+        expect(writes.get('pvControl.miners.miner.s19.restartCountdown')).to.equal(null);
+        expect(writes.get('pvControl.miners.miner.s19.safetyReason')).to.equal('relay_feedback_missing_or_stale');
+        expect(writes.get('pvControl.miners.miner.s19.restartLocked')).to.equal(true);
+        expect(writes.get('pvControl.miners.miner.s9.relayOn')).to.equal(false);
+        expect(writes.get('pvControl.miners.miner.s9.safetyReason')).to.equal('restart_delay_running');
+
+        // Recovery restores diagnostics, but never removes either command lock.
+        foreign.set('relay.s19', { val: false, ack: true, ts: Date.now() });
+        await adapter.runPvMonitor();
+        expect(writes.get('pvControl.miners.miner.s19.relayOn')).to.equal(false);
+        expect(writes.get('pvControl.miners.miner.s19.safetyReason')).to.equal('restart_delay_running');
+        expect(adapter.pvRelayOffMiners.has('s9')).to.equal(true);
+        expect(adapter.pvRelayOffMiners.has('s19')).to.equal(true);
+        expect(adapter.pvSafeStops.size).to.equal(0);
+    });
+});
