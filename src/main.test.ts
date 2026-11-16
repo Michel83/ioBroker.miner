@@ -270,7 +270,7 @@ describe('PV restart lock persistent diagnostics (no hardware)', () => {
             } as unknown as ioBroker.DeviceObject);
 
             expect(internal.pvRelayOffMiners.has(minerId)).to.equal(true);
-            const value = records.get(`pvControl.miners.${minerId}.restartLockDiagnostic`);
+            const value = records.get(`pvControl.miners.miner.${minerId}.restartLockDiagnostic`);
             expect(value).to.be.a('string');
             const diagnostic = JSON.parse(value as string) as Record<string, unknown>;
             expect(diagnostic.minerId).to.equal(minerId);
