@@ -20,6 +20,12 @@ declare global {
             /** Battery SOC state for read-only V2.43 diagnostics (0-100%). */
             pvBatterySocId?: string;
 
+            /** Observed S9 power target state, read-only V2.43 diagnostic input. */
+            pvS9TargetStateId?: string;
+
+            /** Observed S19 power target state, read-only V2.43 diagnostic input. */
+            pvS19TargetStateId?: string;
+
             /** PV regulation interval in seconds (default: 120). */
             pvInterval?: number;
 
