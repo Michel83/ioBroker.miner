@@ -415,3 +415,21 @@ export class PvRelayOffPowerConfirmation {
         this.consecutiveNearZero = 0;
     }
 }
+
+/**
+ * Fail-closed command policy for PV-controlled miners.
+ * A persisted safe-stop record is diagnostic evidence only; it never unlocks commands.
+ */
+export function isPvMinerCommandAllowed(
+    minerId: string,
+    activeSafeStops: ReadonlySet<string>,
+    relayOffOrRestartLockedMiners: ReadonlySet<string>,
+    adapterShuttingDown: boolean,
+): boolean {
+    return (
+        minerId.length > 0 &&
+        !adapterShuttingDown &&
+        !activeSafeStops.has(minerId) &&
+        !relayOffOrRestartLockedMiners.has(minerId)
+    );
+}
