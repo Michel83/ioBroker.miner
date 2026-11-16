@@ -495,3 +495,42 @@ export function isPvPostPowerOnApproved(values: PvPostPowerOnApproval): boolean 
         isPvStartReady(readiness)
     );
 }
+
+/**
+ * Diagnostic-only stage-1 evidence bound to one miner and one adapter lifetime.
+ * A saved record must never be accepted as a command authorization.
+ */
+export interface PvPrePowerOnEvidence {
+    minerId: string;
+    adapterSessionId: string;
+    approvedAt: number;
+    expiresAt: number;
+}
+
+/** Reject mismatched, expired, future-dated or previous-session preflight evidence. */
+export function isPvPrePowerOnEvidenceCurrent(
+    evidence: PvPrePowerOnEvidence | undefined,
+    minerId: string,
+    adapterSessionId: string,
+    relayPoweredOnAt: number | undefined,
+    now: number,
+): boolean {
+    return (
+        evidence !== undefined &&
+        minerId.length > 0 &&
+        adapterSessionId.length > 0 &&
+        evidence.minerId === minerId &&
+        evidence.adapterSessionId === adapterSessionId &&
+        Number.isFinite(evidence.approvedAt) &&
+        Number.isFinite(evidence.expiresAt) &&
+        Number.isFinite(now) &&
+        relayPoweredOnAt !== undefined &&
+        Number.isFinite(relayPoweredOnAt) &&
+        evidence.approvedAt > 0 &&
+        evidence.approvedAt <= relayPoweredOnAt &&
+        relayPoweredOnAt <= now &&
+        evidence.expiresAt > evidence.approvedAt &&
+        relayPoweredOnAt <= evidence.expiresAt &&
+        now <= evidence.expiresAt
+    );
+}
