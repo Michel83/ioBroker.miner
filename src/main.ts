@@ -82,6 +82,7 @@ export class MinerAdapter extends utils.Adapter {
         // this.on('message', this.onMessage.bind(this));
         this.on('unload', this.onUnload.bind(this));
 
+        this.minerManager.setCommandGuard(id => !this.pvSafeStops.has(id) && !this.pvShuttingDown);
         this.deviceManagement = new MinerAdapterDeviceManagement(this);
     }
 
