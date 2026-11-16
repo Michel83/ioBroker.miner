@@ -31,6 +31,25 @@ describe('PV restart reason diagnostics (read-only)', () => {
         v.gridPower = -2500; v.countdown = 90;
         expect(pvRestartSafetyReason(v)).to.equal('restart_delay_running');
     });
+    it('treats non-finite PV readings as unavailable, never as safe export', () => {
+        for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+            expect(pvRestartSafetyReason({ ...ready(), gridPower: invalid })).to.equal('pv_measurements_missing_or_stale');
+            expect(pvRestartSafetyReason({ ...ready(), batteryPower: invalid })).to.equal('pv_measurements_missing_or_stale');
+        }
+    });
+    it('reports invalid power limits and reserves as invalid configuration', () => {
+        for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+            expect(pvRestartSafetyReason({ ...ready(), minimumStartWatts: invalid })).to.equal('pv_configuration_invalid');
+            expect(pvRestartSafetyReason({ ...ready(), reserveWatts: invalid })).to.equal('pv_configuration_invalid');
+        }
+        expect(pvRestartSafetyReason({ ...ready(), minimumStartWatts: 0 })).to.equal('pv_configuration_invalid');
+        expect(pvRestartSafetyReason({ ...ready(), reserveWatts: -1 })).to.equal('pv_configuration_invalid');
+    });
+    it('rejects non-finite and negative restart countdown diagnostics', () => {
+        for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1]) {
+            expect(pvRestartSafetyReason({ ...ready(), countdown: invalid })).to.equal('restart_stop_evidence_unavailable');
+        }
+    });
     it('reports adapter shutdown and missing stop evidence', () => {
         const v = ready(); v.shuttingDown = true;
         expect(pvRestartSafetyReason(v)).to.equal('adapter_shutting_down');
