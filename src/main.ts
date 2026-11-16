@@ -20,6 +20,7 @@ import type { MinerSettings } from './lib/miner/model/MinerSettings';
 import type { MinerStats } from './lib/miner/model/MinerStats';
 import { asyncDynamicInterval, setTimerBackend, type AsyncIntervalReturnType } from './lib/utils/delay';
 import { PvShutdownConfirmation, isPvShutdownSafe, isPvStopRestorationConsistent } from './lib/pv/PvShutdownSafety';
+import { calculatePvV243 } from './lib/pv/PvRegulationV243';
 import { UpdateSources } from './lib/update/UpdateSources';
 import { runUpdateChecks, type UpdateCheckSummary } from './lib/update/runUpdateChecks';
 import type { UpdateCheckContext, UpdateCheckResult } from './lib/miner/model/UpdateCheckResult';
@@ -1196,6 +1197,10 @@ export class MinerAdapter extends utils.Adapter {
             gridPower: { name: 'Grid power', type: 'number', unit: 'W' },
             batteryPower: { name: 'Battery power', type: 'number', unit: 'W' },
             surplus: { name: 'PV surplus after reserve and battery discharge', type: 'number', unit: 'W' },
+            batterySoc: { name: 'Battery SOC for V2.43', type: 'number', unit: '%' },
+            v243Available: { name: 'V2.43 available PV power', type: 'number', unit: 'W' },
+            v243EffectiveGrid: { name: 'V2.43 effective grid power', type: 'number', unit: 'W' },
+            v243Status: { name: 'V2.43 calculation status (read-only)', type: 'string' },
             status: { name: 'PV monitor status', type: 'string' },
         };
         for (const [key, common] of Object.entries(states)) {
@@ -1296,6 +1301,16 @@ export class MinerAdapter extends utils.Adapter {
             const reserve = Math.max(0, Number(this.config.pvReserve) || 0);
             const surplus = valid ? Math.max(0, -grid - reserve - Math.max(0, battery)) : null;
             await this.setState('pvControl.surplus', { val: surplus, ack: true });
+            // V2.43 requires a fresh SOC reading; do not substitute zero or guess.
+            const soc = await this.readFreshPvValue(this.config.pvBatterySocId || '', ageMs);
+            const v243 = calculatePvV243({ gridPower: grid, batteryPower: battery, batterySoc: soc });
+            await this.setState('pvControl.batterySoc', { val: soc ?? null, ack: true });
+            await this.setState('pvControl.v243Available', { val: v243?.availableWatts ?? null, ack: true });
+            await this.setState('pvControl.v243EffectiveGrid', { val: v243?.effectiveGridWatts ?? null, ack: true });
+            await this.setState('pvControl.v243Status', {
+                val: v243 ? 'Read-only V2.43 calculation valid; commands locked' : 'Missing, stale or invalid V2.43 input; commands locked',
+                ack: true,
+            });
             const status = !valid
                 ? 'Missing or stale PV measurements; no commands sent'
                 : 'Read-only diagnostics active; miner and relay commands locked';
