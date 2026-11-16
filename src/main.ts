@@ -400,7 +400,7 @@ export class MinerAdapter extends utils.Adapter {
         }
 
         try {
-            const applied = await this.minerManager.withExclusiveMiner(minerId, miner => {
+            const applied = await this.minerManager.withExclusiveMinerCommand(minerId, miner => {
                 if (!isPvMinerCommandAllowed(minerId, this.pvSafeStops, this.pvRelayOffMiners, this.pvShuttingDown)) {
                     throw new Error('PV safe stop or adapter shutdown active');
                 }
