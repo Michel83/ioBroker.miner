@@ -19,7 +19,7 @@ import { isWithinPowerTargetConstraints, type Miner } from './lib/miner/miner/Mi
 import type { MinerSettings } from './lib/miner/model/MinerSettings';
 import type { MinerStats } from './lib/miner/model/MinerStats';
 import { asyncDynamicInterval, setTimerBackend, type AsyncIntervalReturnType } from './lib/utils/delay';
-import { PvShutdownConfirmation, isPvShutdownSafe, isPvStopRestorationConsistent } from './lib/pv/PvShutdownSafety';
+import { PvShutdownConfirmation, isPvRelayOffConfirmed, isPvShutdownSafe, isPvStopRestorationConsistent } from './lib/pv/PvShutdownSafety';
 import { calculatePvV243 } from './lib/pv/PvRegulationV243';
 import { evaluatePvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
 import type { PvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
@@ -1550,13 +1550,42 @@ export class MinerAdapter extends utils.Adapter {
                         const confirmationDeadline = Date.now() + 90_000;
                         while (Date.now() < confirmationDeadline && !this.pvShuttingDown) {
                             await this.delay(5_000);
-                            const sample = await this.readFreshPvMeasurement(pv.powerStateId, ageMs);
+                            const [sample, relayFeedback] = await Promise.all([
+                                this.readFreshPvMeasurement(pv.powerStateId, ageMs),
+                                this.getForeignStateAsync(pv.relayStateId),
+                            ]);
+                            const feedbackNow = Date.now();
+                            if (!isPvRelayOffConfirmed(
+                                relayFeedback?.val,
+                                relayFeedback?.ts,
+                                relayFeedback?.ack,
+                                pv.relayOnValue,
+                                relayOffRequestedAt,
+                                feedbackNow,
+                                ageMs,
+                            )) {
+                                zeroPowerSamples = 0;
+                                continue;
+                            }
                             if (!sample || sample.timestamp <= lastPowerTimestamp) {
                                 continue;
                             }
                             lastPowerTimestamp = sample.timestamp;
                             zeroPowerSamples = sample.value >= 0 && sample.value <= 5 ? zeroPowerSamples + 1 : 0;
                             if (zeroPowerSamples >= 3) {
+                                const finalFeedback = await this.getForeignStateAsync(pv.relayStateId);
+                                if (!isPvRelayOffConfirmed(
+                                    finalFeedback?.val,
+                                    finalFeedback?.ts,
+                                    finalFeedback?.ack,
+                                    pv.relayOnValue,
+                                    relayOffRequestedAt,
+                                    Date.now(),
+                                    ageMs,
+                                )) {
+                                    zeroPowerSamples = 0;
+                                    continue;
+                                }
                                 const record = {
                                     minerId: id,
                                     relayStateId: pv.relayStateId,
@@ -1597,7 +1626,7 @@ export class MinerAdapter extends utils.Adapter {
                             }
                         }
                         throw new Error(
-                            `PV relay OFF requested for ${settings.name}, but power loss was not confirmed; miner commands remain blocked`,
+                            `PV relay OFF requested for ${settings.name}, but fresh acknowledged relay OFF feedback and three near-zero power samples were not confirmed; miner commands remain blocked`,
                         );
                     }
                     await this.delay(5_000);
@@ -1605,7 +1634,7 @@ export class MinerAdapter extends utils.Adapter {
                 throw new Error(`PV safe stop timed out for ${settings.name}; relay remains ON`);
             });
         } catch (error) {
-            this.log.error(`PV safe stop failed for ${settings.name}; relay NOT switched off: ${String(error)}`);
+            this.log.error(`PV safe stop failed for ${settings.name}; relay state may be unknown: ${String(error)}`);
             throw error;
         } finally {
             this.pvSafeStops.delete(id);
