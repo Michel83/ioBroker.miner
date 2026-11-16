@@ -758,6 +758,8 @@ describe('PV relay OFF acknowledgement', () => {
 
     it('rejects future and stale feedback', () => {
         expect(confirmed(false, now + 1, true)).to.equal(false);
-        expect(isPvRelayOffConfirmed(false, requestedAt + 1000, true, true, requestedAt, now + 20_000, 15_000)).to.equal(false);
+        expect(
+            isPvRelayOffConfirmed(false, requestedAt + 1000, true, true, requestedAt, now + 20_000, 15_000),
+        ).to.equal(false);
     });
 });

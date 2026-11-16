@@ -19,7 +19,12 @@ import { isWithinPowerTargetConstraints, type Miner } from './lib/miner/miner/Mi
 import type { MinerSettings } from './lib/miner/model/MinerSettings';
 import type { MinerStats } from './lib/miner/model/MinerStats';
 import { asyncDynamicInterval, setTimerBackend, type AsyncIntervalReturnType } from './lib/utils/delay';
-import { PvShutdownConfirmation, isPvRelayOffConfirmed, isPvShutdownSafe, isPvStopRestorationConsistent } from './lib/pv/PvShutdownSafety';
+import {
+    PvShutdownConfirmation,
+    isPvRelayOffConfirmed,
+    isPvShutdownSafe,
+    isPvStopRestorationConsistent,
+} from './lib/pv/PvShutdownSafety';
 import { calculatePvV243 } from './lib/pv/PvRegulationV243';
 import { evaluatePvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
 import type { PvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
@@ -1555,15 +1560,17 @@ export class MinerAdapter extends utils.Adapter {
                                 this.getForeignStateAsync(pv.relayStateId),
                             ]);
                             const feedbackNow = Date.now();
-                            if (!isPvRelayOffConfirmed(
-                                relayFeedback?.val,
-                                relayFeedback?.ts,
-                                relayFeedback?.ack,
-                                pv.relayOnValue,
-                                relayOffRequestedAt,
-                                feedbackNow,
-                                ageMs,
-                            )) {
+                            if (
+                                !isPvRelayOffConfirmed(
+                                    relayFeedback?.val,
+                                    relayFeedback?.ts,
+                                    relayFeedback?.ack,
+                                    pv.relayOnValue,
+                                    relayOffRequestedAt,
+                                    feedbackNow,
+                                    ageMs,
+                                )
+                            ) {
                                 zeroPowerSamples = 0;
                                 continue;
                             }
@@ -1574,15 +1581,17 @@ export class MinerAdapter extends utils.Adapter {
                             zeroPowerSamples = sample.value >= 0 && sample.value <= 5 ? zeroPowerSamples + 1 : 0;
                             if (zeroPowerSamples >= 3) {
                                 const finalFeedback = await this.getForeignStateAsync(pv.relayStateId);
-                                if (!isPvRelayOffConfirmed(
-                                    finalFeedback?.val,
-                                    finalFeedback?.ts,
-                                    finalFeedback?.ack,
-                                    pv.relayOnValue,
-                                    relayOffRequestedAt,
-                                    Date.now(),
-                                    ageMs,
-                                )) {
+                                if (
+                                    !isPvRelayOffConfirmed(
+                                        finalFeedback?.val,
+                                        finalFeedback?.ts,
+                                        finalFeedback?.ack,
+                                        pv.relayOnValue,
+                                        relayOffRequestedAt,
+                                        Date.now(),
+                                        ageMs,
+                                    )
+                                ) {
                                     zeroPowerSamples = 0;
                                     continue;
                                 }
