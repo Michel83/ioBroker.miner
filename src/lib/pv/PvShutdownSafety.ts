@@ -223,3 +223,39 @@ export function isPvStartReady(values: PvStartReadiness): boolean {
         values.now - values.relayEnabledAt >= values.startupDelayMs
     );
 }
+
+/** Injectable hardware operations for a separately enabled PV startup controller. */
+export interface PvStartupOperations {
+    /** Recheck PV eligibility immediately before relay power-on. */
+    mayPowerOn: () => Promise<boolean>;
+    /** Request relay power-on; does not imply confirmed power. */
+    powerOnRelay: () => Promise<void>;
+    /** Wait for startup delay and return fresh relay/miner readiness evidence. */
+    awaitReadiness: () => Promise<PvStartReadiness>;
+    /** Recheck PV eligibility immediately before starting mining. */
+    mayStartMining: () => Promise<boolean>;
+    /** Issue the miner start command only after all checks. */
+    startMining: () => Promise<void>;
+}
+
+/**
+ * Coordinate a PV startup without automatically powering off on failure.
+ * Caller must serialize this sequence with other miner commands and persist
+ * relay/stop state across adapter restarts before enabling hardware writes.
+ *
+ * @param operations - injected hardware operations and safety checks
+ */
+export async function executePvStartup(operations: PvStartupOperations): Promise<void> {
+    if (!(await operations.mayPowerOn())) {
+        throw new Error('PV startup blocked: insufficient or invalid PV conditions');
+    }
+    await operations.powerOnRelay();
+    const readiness = await operations.awaitReadiness();
+    if (!isPvStartReady(readiness)) {
+        throw new Error('PV startup blocked: relay or miner not confirmed ready');
+    }
+    if (!(await operations.mayStartMining())) {
+        throw new Error('PV startup blocked: PV conditions changed before miner start');
+    }
+    await operations.startMining();
+}
