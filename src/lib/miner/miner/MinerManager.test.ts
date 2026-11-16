@@ -39,6 +39,19 @@ describe('MinerManager PV command interlock', () => {
         expect(calls).to.deep.equal([]);
     });
 
+    it('rejects a blocked profile command instead of reporting success', async () => {
+        const { manager, calls } = createManager();
+        manager.setCommandGuard(() => false);
+        let rejected = false;
+        try {
+            await manager.setProfile(id, 'high');
+        } catch {
+            rejected = true;
+        }
+        expect(rejected).to.equal(true);
+        expect(calls).to.deep.equal([]);
+    });
+
     it('still permits a safety stop while other commands are locked', async () => {
         const { manager, calls } = createManager();
         manager.setCommandGuard(() => false);
