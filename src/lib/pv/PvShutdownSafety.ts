@@ -433,3 +433,39 @@ export function isPvMinerCommandAllowed(
         !relayOffOrRestartLockedMiners.has(minerId)
     );
 }
+
+/**
+ * Diagnostic-only candidate for a future explicit PV restart unlock.
+ * This function never changes the lock set and never sends hardware commands.
+ * The caller must obtain new measurements after relay power-on and serialize
+ * any eventual unlock with the miner command queue.
+ */
+export interface PvRestartUnlockCandidate {
+    minerId: string;
+    lockedMiners: ReadonlySet<string>;
+    activeSafeStops: ReadonlySet<string>;
+    adapterShuttingDown: boolean;
+    relayPoweredOnAt: number | undefined;
+    restart: PvRestartMeasurements;
+    readiness: PvStartReadiness;
+}
+
+export function isPvRestartUnlockCandidate(values: PvRestartUnlockCandidate): boolean {
+    const poweredOnAt = values.relayPoweredOnAt;
+    return (
+        values.minerId.length > 0 &&
+        values.lockedMiners.has(values.minerId) &&
+        !values.activeSafeStops.has(values.minerId) &&
+        !values.adapterShuttingDown &&
+        poweredOnAt !== undefined &&
+        Number.isFinite(poweredOnAt) &&
+        values.readiness.relayEnabledAt === poweredOnAt &&
+        values.restart.now >= poweredOnAt &&
+        values.restart.gridTimestamp !== undefined &&
+        values.restart.gridTimestamp > poweredOnAt &&
+        values.restart.batteryTimestamp !== undefined &&
+        values.restart.batteryTimestamp > poweredOnAt &&
+        isPvRestartAllowed(values.restart) &&
+        isPvStartReady(values.readiness)
+    );
+}
