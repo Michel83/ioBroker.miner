@@ -1,5 +1,6 @@
 import { expect } from 'chai';
-import { decidePvTargetV243, PvTargetInputsV243 } from './PvTargetRegulationV243';
+import { decidePvTargetV243 } from './PvTargetRegulationV243';
+import type { PvTargetInputsV243 } from './PvTargetRegulationV243';
 
 describe('V2.43 pure power target regulation', () => {
     const base: PvTargetInputsV243 = {
