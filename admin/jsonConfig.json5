@@ -53,7 +53,7 @@
         "pvEnabled": {
           "type": "checkbox",
           "label": "PV-Automatik aktivieren",
-          "help": "Aktiviert die automatische Leistungsregelung der Miner. Erst nach vollständiger Einrichtung einschalten.",
+          "help": "Derzeit nur Diagnosebetrieb: Diese Option aktiviert keine automatische Leistungsregelung. Miner- und Relaisbefehle bleiben gesperrt.",
           "default": false,
           "newLine": true,
           "xs": 12,
@@ -73,6 +73,30 @@
           "type": "objectId",
           "label": "Datenpunkt Batterieleistung",
           "help": "Positive Werte = Entladung, negative Werte = Ladung.",
+          "newLine": true,
+          "sm": 12,
+          "md": 6
+        },
+        "pvBatterySocId": {
+          "type": "objectId",
+          "label": "Datenpunkt Batterie-SOC (%)",
+          "help": "Für die V2.43-Batteriepriorität erforderlich. Fehlende oder veraltete Werte sperren die Sollwert-Diagnose.",
+          "newLine": true,
+          "sm": 12,
+          "md": 6
+        },
+        "pvS9TargetStateId": {
+          "type": "objectId",
+          "label": "Datenpunkt S9-Sollleistung (W)",
+          "help": "Nur lesender Eingang für die vorläufige S9-Sollwert-Diagnose. Keine Minerbefehle.",
+          "newLine": true,
+          "sm": 12,
+          "md": 6
+        },
+        "pvS19TargetStateId": {
+          "type": "objectId",
+          "label": "Datenpunkt S19-Sollleistung (W)",
+          "help": "Nur lesender Eingang für die vorläufige S19-Sollwert-Diagnose. Keine Minerbefehle.",
           "newLine": true,
           "sm": 12,
           "md": 6
@@ -120,7 +144,7 @@
         "pvMaxDataAge": {
           "type": "number",
           "label": "Maximales Messwertalter (Sekunden)",
-          "help": "Bei veralteten Messwerten wird die PV-Steuerung aus Sicherheitsgründen abgeschaltet.",
+          "help": "Veraltete Messwerte werden in der Diagnose verworfen. Die automatische PV-Regelung ist noch nicht aktiv.",
           "default": 180,
           "min": 30,
           "max": 3600,
