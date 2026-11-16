@@ -21,6 +21,8 @@ import type { MinerStats } from './lib/miner/model/MinerStats';
 import { asyncDynamicInterval, setTimerBackend, type AsyncIntervalReturnType } from './lib/utils/delay';
 import { PvShutdownConfirmation, isPvShutdownSafe, isPvStopRestorationConsistent } from './lib/pv/PvShutdownSafety';
 import { calculatePvV243 } from './lib/pv/PvRegulationV243';
+import { evaluatePvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
+import type { PvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
 import type { PvMinerKindV243 } from './lib/pv/PvTargetRegulationV243';
 import { PvTargetDiagnosticV243 } from './lib/pv/PvTargetDiagnosticV243';
 import { UpdateSources } from './lib/update/UpdateSources';
@@ -51,6 +53,7 @@ export class MinerAdapter extends utils.Adapter {
     private pvMonitorBusy = false;
     private readonly pvTargetDiagnostic = new PvTargetDiagnosticV243();
     private pvMonitorWarning = '';
+    private pvRunHistory: PvRunEligibilityV243 | undefined;
     private readonly pvSafeStops = new Set<string>();
     private readonly pvRelayOffMiners = new Set<string>();
     private pvShuttingDown = false;
@@ -1204,6 +1207,8 @@ export class MinerAdapter extends utils.Adapter {
             v243Available: { name: 'V2.43 available PV power', type: 'number', unit: 'W' },
             v243EffectiveGrid: { name: 'V2.43 effective grid power', type: 'number', unit: 'W' },
             v243Status: { name: 'V2.43 calculation status (read-only)', type: 'string' },
+            s9RunEligibility: { name: 'S9 start/stop eligibility (read-only)', type: 'string' },
+            s19RunEligibility: { name: 'S19 start/stop eligibility (read-only)', type: 'string' },
             s9SuggestedTarget: { name: 'S9 proposed target (diagnostic only)', type: 'number', unit: 'W' },
             s9Decision: { name: 'S9 proposed action (diagnostic only)', type: 'string' },
             s19SuggestedTarget: { name: 'S19 proposed target (diagnostic only)', type: 'number', unit: 'W' },
@@ -1257,6 +1262,25 @@ export class MinerAdapter extends utils.Adapter {
             typeof timestamp !== 'number' ||
             timestamp > Date.now() + 10_000 ||
             Date.now() - timestamp > maxAgeMs
+        ) {
+            return undefined;
+        }
+        return state.val;
+    }
+
+    private async readFreshPvBoolean(id: string, maxAgeMs: number): Promise<boolean | undefined> {
+        if (!id) {
+            return undefined;
+        }
+        const state = await this.getForeignStateAsync(id);
+        const now = Date.now();
+        if (
+            !state ||
+            typeof state.val !== 'boolean' ||
+            typeof state.ts !== 'number' ||
+            !Number.isFinite(state.ts) ||
+            state.ts > now ||
+            now - state.ts > maxAgeMs
         ) {
             return undefined;
         }
@@ -1348,6 +1372,37 @@ export class MinerAdapter extends utils.Adapter {
                         : 'Unavailable: missing or stale target/PV measurement',
                     ack: true,
                 });
+            }
+            // Read-only running/actual-power observations. No action path consumes these decisions.
+            const [s9Running, s19Running, s9Actual, s19Actual, s9Target] = await Promise.all([
+                this.readFreshPvBoolean(this.config.pvS9RunningStateId || '', ageMs),
+                this.readFreshPvBoolean(this.config.pvS19RunningStateId || '', ageMs),
+                this.readFreshPvValue(this.config.pvS9ActualPowerId || '', ageMs),
+                this.readFreshPvValue(this.config.pvS19ActualPowerId || '', ageMs),
+                this.readFreshPvValue(this.config.pvS9TargetStateId || '', ageMs),
+            ]);
+            const runEligibility = evaluatePvRunEligibilityV243({
+                now: Date.now(),
+                hour: new Date().getHours(),
+                availableWatts: v243?.availableWatts,
+                s9Running,
+                s19Running,
+                s9TargetWatts: s9Target,
+                s9ActualWatts: s9Actual,
+                gridPowerWatts: grid,
+                s9ToS19CandidateSince: this.pvRunHistory?.s9ToS19CandidateSince,
+                s9LowPowerSince: this.pvRunHistory?.s9LowPowerSince,
+                s19LowPowerSince: this.pvRunHistory?.s19LowPowerSince,
+            });
+            // S19 actual power must also be fresh before reporting eligibility.
+            if (s19Actual === undefined) {
+                this.pvRunHistory = undefined;
+                await this.setState('pvControl.s9RunEligibility', { val: 'unavailable: S19 actual power missing', ack: true });
+                await this.setState('pvControl.s19RunEligibility', { val: 'unavailable: S19 actual power missing', ack: true });
+            } else {
+                this.pvRunHistory = runEligibility;
+                await this.setState('pvControl.s9RunEligibility', { val: runEligibility.s9, ack: true });
+                await this.setState('pvControl.s19RunEligibility', { val: runEligibility.s19, ack: true });
             }
             const status = !valid
                 ? 'Missing or stale PV measurements; no commands sent'
