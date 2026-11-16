@@ -635,7 +635,14 @@ export class MinerAdapter extends utils.Adapter {
         // Fail closed on every adapter restart. Persisted history cannot authorize commands.
         if (settings.pvControl?.enabled === true && settings.settings.id) {
             this.pvRelayOffMiners.add(settings.settings.id);
-            await this.restorePvStopDiagnostics(settings);
+            try {
+                await this.restorePvStopDiagnostics(settings);
+            } catch (error) {
+                // Diagnostics must never release the command guard or abort device initialization.
+                this.log.warn(
+                    `PV restart locked for ${settings.name}: stop history or measurement lookup failed: ${String(error)}`,
+                );
+            }
         }
 
         await this.createDeviceStateObjects(settings);
