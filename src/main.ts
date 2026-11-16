@@ -449,16 +449,17 @@ export class MinerAdapter extends utils.Adapter {
             this.getForeignStateAsync(relayId),
         ]);
         const now = Date.now();
-        const relayFresh =
-            typeof relay?.ts === 'number' &&
-            relay.ts <= now &&
-            now - relay.ts <= ageMs;
+        const relayFresh = typeof relay?.ts === 'number' && relay.ts <= now && now - relay.ts <= ageMs;
         const relayOff = relayFresh && relay?.val === !settings.pvControl?.relayOnValue;
         const powerOff = power !== undefined && power.value >= 0 && power.value <= 5;
         if (record && relayOff && powerOff) {
-            this.log.info(`PV stop history for ${settings.name} matches fresh OFF/zero-power diagnostics; restart remains locked`);
+            this.log.info(
+                `PV stop history for ${settings.name} matches fresh OFF/zero-power diagnostics; restart remains locked`,
+            );
         } else {
-            this.log.warn(`PV restart locked for ${settings.name}: stored stop, relay or power diagnostics missing/inconsistent`);
+            this.log.warn(
+                `PV restart locked for ${settings.name}: stored stop, relay or power diagnostics missing/inconsistent`,
+            );
         }
     }
 
