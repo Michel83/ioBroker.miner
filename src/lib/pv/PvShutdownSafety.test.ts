@@ -456,6 +456,45 @@ describe('PV automatic restart eligibility', () => {
     });
 });
 
+describe('PV restart release remains diagnostic only', () => {
+    const now = 1_800_000_000_000;
+    const base = (): PvRestartMeasurements => ({
+        enabled: true,
+        relayConfirmedOff: true,
+        gridPower: -2500,
+        batteryPower: 0,
+        gridTimestamp: now,
+        batteryTimestamp: now,
+        now,
+        maxAgeMs: 15_000,
+        reserveWatts: 200,
+        minimumStartWatts: 1800,
+        lastStoppedAt: now - 180_000,
+        restartDelayMs: 180_000,
+    });
+
+    it('keeps the command lock even when restart measurements are eligible', () => {
+        const locked = new Set(['s9', 's19']);
+        expect(isPvRestartAllowed(base())).to.equal(true);
+        for (const id of locked) {
+            expect(isPvMinerCommandAllowed(id, new Set<string>(), locked, false)).to.equal(false);
+        }
+    });
+
+    it('rejects export that cannot cover battery discharge and reserve', () => {
+        expect(isPvRestartAllowed({ ...base(), batteryPower: 600 })).to.equal(false);
+        expect(isPvRestartAllowed({ ...base(), batteryPower: 500 })).to.equal(true);
+    });
+
+    it('rejects future, missing and invalid restart evidence', () => {
+        expect(isPvRestartAllowed({ ...base(), gridTimestamp: now + 1 })).to.equal(false);
+        expect(isPvRestartAllowed({ ...base(), batteryTimestamp: undefined })).to.equal(false);
+        expect(isPvRestartAllowed({ ...base(), gridPower: Number.NaN })).to.equal(false);
+        expect(isPvRestartAllowed({ ...base(), lastStoppedAt: undefined })).to.equal(false);
+        expect(isPvRestartAllowed({ ...base(), lastStoppedAt: now + 1 })).to.equal(false);
+    });
+});
+
 describe('PV miner startup readiness', () => {
     const now = 1_800_000_000_000;
     const valid = (): PvStartReadiness => ({
