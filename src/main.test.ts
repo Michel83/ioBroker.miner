@@ -891,3 +891,113 @@ describe('PV VIS integration: two miners and lost relay feedback (no hardware)',
         expect(adapter.pvSafeStops.size).to.equal(0);
     });
 });
+
+
+describe('PV diagnostics after adapter restart and interrupted monitoring (no hardware)', () => {
+    it('reinitializes S9 and S19 VIS diagnostics as locked, without trusting old displayed values', async () => {
+        const adapter = createTestAdapter() as unknown as {
+            config: { checkForUpdates: boolean };
+            pvRelayOffMiners: Set<string>;
+            minerManager: { init: () => Promise<object>; getMiners: () => object[] };
+            restorePvStopDiagnostics: () => Promise<void>;
+            createDeviceStateObjects: () => Promise<void>;
+            writeStaticInfoStates: () => Promise<void>;
+            extendObject: () => Promise<void>;
+            setState: (id: string, state: { val: unknown }) => Promise<void>;
+            setStateChangedAsync: () => Promise<void>;
+            initDevice: (device: ioBroker.DeviceObject) => Promise<void>;
+        };
+        const writes = new Map<string, unknown>();
+        adapter.config.checkForUpdates = false;
+        adapter.restorePvStopDiagnostics = async () => {};
+        adapter.minerManager = {
+            init: async () => { throw new Error('simulated offline miner'); },
+            getMiners: () => [],
+        };
+        adapter.createDeviceStateObjects = async () => {};
+        adapter.writeStaticInfoStates = async () => {};
+        adapter.extendObject = async () => {};
+        adapter.setStateChangedAsync = async () => {};
+        adapter.setState = async (id, state) => { writes.set(id, state.val); };
+        for (const id of ['s9', 's19']) {
+            const prefix = `pvControl.miners.miner.${id}`;
+            // Simulate VIS values persisted from the previous adapter process.
+            writes.set(`${prefix}.restartLocked`, false);
+            writes.set(`${prefix}.relayOn`, true);
+            writes.set(`${prefix}.restartCountdown`, 0);
+            writes.set(`${prefix}.safetyReason`, 'no_observed_blocker');
+            await adapter.initDevice({
+                _id: `miner.0.miner.${id}`,
+                native: {
+                    category: 'miner', name: id, enabled: true,
+                    settings: { id, minerType: 'bos', host: 'localhost' },
+                    pvControl: { enabled: true },
+                },
+            } as unknown as ioBroker.DeviceObject);
+            expect(adapter.pvRelayOffMiners.has(id)).to.equal(true);
+            expect(writes.get(`${prefix}.restartLocked`)).to.equal(true);
+            expect(writes.get(`${prefix}.relayOn`)).to.equal(null);
+            expect(writes.get(`${prefix}.restartCountdown`)).to.equal(null);
+            expect(writes.get(`${prefix}.safetyReason`)).to.equal('adapter_restart_requires_fresh_safety_validation');
+        }
+    });
+
+    it('invalidates stale relay/countdown after a feedback read fails mid-monitor, keeping the lock', async () => {
+        const adapter = createTestAdapter() as unknown as {
+            config: Record<string, unknown>;
+            getDevicesAsync: () => Promise<ioBroker.DeviceObject[]>;
+            getForeignStateAsync: (id: string) => Promise<{ val: number | boolean; ack: boolean; ts: number } | null>;
+            getStateAsync: (id: string) => Promise<{ val: unknown } | null>;
+            setState: (id: string, state: { val: unknown }) => Promise<void>;
+            runPvMonitor: () => Promise<void>;
+            pvRelayOffMiners: Set<string>;
+        };
+        const now = Date.now();
+        const prefix = 'pvControl.miners.miner.s19';
+        const writes = new Map<string, unknown>();
+        let failFeedback = false;
+        adapter.config = {
+            pvMaxDataAge: 15, pvGridPowerId: 'pv.grid', pvBatteryPowerId: 'pv.battery', pvReserve: 200,
+        };
+        adapter.getDevicesAsync = async () => [{
+            _id: 'miner.0.miner.s19',
+            native: {
+                category: 'miner', name: 's19', settings: { id: 's19', minerType: 'bosMiner' },
+                pvControl: {
+                    enabled: true, relayStateId: 'relay.s19', relayOnValue: true,
+                    powerStateId: 'power.s19', restartDelay: 180, minPower: 1800,
+                },
+            },
+        } as unknown as ioBroker.DeviceObject];
+        adapter.getForeignStateAsync = async id => {
+            if (id === 'relay.s19') {
+                if (failFeedback) throw new Error('simulated Sonoff timeout');
+                return { val: false, ack: true, ts: now };
+            }
+            if (id === 'power.s19') return { val: 0, ack: true, ts: now };
+            if (id === 'pv.grid') return { val: -4500, ack: true, ts: now };
+            if (id === 'pv.battery') return { val: 0, ack: true, ts: now };
+            return null;
+        };
+        adapter.getStateAsync = async id => id === `${prefix}.lastSafeStop`
+            ? { val: JSON.stringify({
+                minerId: 's19', relayStateId: 'relay.s19',
+                stoppedAt: now - 60_000, relayOffConfirmed: true,
+            }) }
+            : null;
+        adapter.setState = async (id, state) => { writes.set(id, state.val); };
+        adapter.pvRelayOffMiners.add('s19');
+
+        await adapter.runPvMonitor();
+        expect(writes.get(`${prefix}.relayOn`)).to.equal(false);
+        expect(writes.get(`${prefix}.restartCountdown`)).to.be.a('number');
+
+        failFeedback = true;
+        await adapter.runPvMonitor();
+        expect(writes.get(`${prefix}.relayOn`)).to.equal(null);
+        expect(writes.get(`${prefix}.restartCountdown`)).to.equal(null);
+        expect(writes.get(`${prefix}.restartLocked`)).to.equal(true);
+        expect(writes.get(`${prefix}.safetyReason`)).to.equal('relay_feedback_missing_or_stale');
+        expect(adapter.pvRelayOffMiners.has('s19')).to.equal(true);
+    });
+});
