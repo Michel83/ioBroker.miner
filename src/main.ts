@@ -668,6 +668,46 @@ export class MinerAdapter extends utils.Adapter {
         }
 
         await this.createDeviceStateObjects(settings);
+        if (settings.pvControl?.enabled === true && settings.settings.id) {
+            // Diagnostic only: the in-memory command lock was set before any async work.
+            // Persisted diagnostics are never read as authorization to unlock a miner.
+            const lockPath = `pvControl.miners.${this.getDeviceObjectId(settings)}.restartLockDiagnostic`;
+            try {
+                await this.extendObject('pvControl.miners', {
+                    type: 'channel',
+                    common: { name: 'PV miner diagnostics' },
+                    native: {},
+                });
+                await this.extendObject(`pvControl.miners.${this.getDeviceObjectId(settings)}`, {
+                    type: 'channel',
+                    common: { name: 'PV miner diagnostics' },
+                    native: {},
+                });
+                await this.extendObject(lockPath, {
+                    type: 'state',
+                    common: {
+                        name: 'PV restart lock diagnostic (JSON)',
+                        type: 'string',
+                        role: 'json',
+                        read: true,
+                        write: false,
+                    },
+                    native: {},
+                });
+                await this.setState(lockPath, {
+                    val: JSON.stringify({
+                        minerId: settings.settings.id,
+                        locked: true,
+                        reason: 'adapter_restart_requires_fresh_safety_validation',
+                        recordedAt: Date.now(),
+                        safetyStatus: 'not_authorized',
+                    }),
+                    ack: true,
+                });
+            } catch (error) {
+                this.log.warn(`PV restart lock diagnostic write failed for ${settings.name}; lock remains active: ${String(error)}`);
+            }
+        }
         const enabledState = await this.getStateAsync(`${device._id}.enabled`);
         settings.enabled = (enabledState?.val ?? initialEnabled ?? true) as boolean;
         await this.writeStaticInfoStates(settings);
