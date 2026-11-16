@@ -719,6 +719,35 @@ export class MinerAdapter extends utils.Adapter {
                     },
                     native: {},
                 });
+                // Unknown is deliberate: no fresh acknowledged relay feedback or
+                // validated restart deadline has been established on adapter startup.
+                await this.extendObject(`${diagnosticBase}.relayOn`, {
+                    type: 'state',
+                    common: {
+                        name: 'Confirmed relay ON (null = unknown)',
+                        type: 'boolean',
+                        role: 'indicator',
+                        read: true,
+                        write: false,
+                    },
+                    native: {},
+                });
+                await this.extendObject(`${diagnosticBase}.restartCountdown`, {
+                    type: 'state',
+                    common: {
+                        name: 'Validated restart countdown (null = unavailable)',
+                        type: 'number',
+                        role: 'value.interval',
+                        unit: 's',
+                        read: true,
+                        write: false,
+                    },
+                    native: {},
+                });
+                // lastSafeStop is already stored as a per-miner JSON record by the
+                // safe-stop path; do not overwrite it with an invented timestamp.
+                await this.setState(`${diagnosticBase}.relayOn`, { val: null, ack: true });
+                await this.setState(`${diagnosticBase}.restartCountdown`, { val: null, ack: true });
                 await this.setState(`${diagnosticBase}.restartLocked`, {
                     val: this.pvRelayOffMiners.has(settings.settings.id),
                     ack: true,
