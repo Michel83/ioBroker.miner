@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { MinerManager } from './MinerManager';
-import { isPvRestartUnlockCandidate } from '../../pv/PvShutdownSafety';
+import { isPvRestartUnlockCandidate, type PvRestartUnlockCandidate } from '../../pv/PvShutdownSafety';
 
 describe('PV restart unlock and miner command queue (simulation only)', () => {
     const now = 1_800_000_000_000;
@@ -24,16 +24,17 @@ describe('PV restart unlock and miner command queue (simulation only)', () => {
         return { manager, locks, calls };
     }
 
-    function evidence(id: string, locks: ReadonlySet<string>) {
+    function evidence(id: string, locks: ReadonlySet<string>): PvRestartUnlockCandidate {
         return {
             minerId: id,
             lockedMiners: locks,
             activeSafeStops: new Set<string>(),
             adapterShuttingDown: false,
             relayPoweredOnAt: poweredOnAt,
+            prePowerOnApproved: true,
             restart: {
                 enabled: true,
-                relayConfirmedOff: true,
+                relayConfirmedOff: false,
                 gridPower: -2500,
                 batteryPower: 0,
                 gridTimestamp: now,
