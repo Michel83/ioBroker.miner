@@ -1397,8 +1397,14 @@ export class MinerAdapter extends utils.Adapter {
             // S19 actual power must also be fresh before reporting eligibility.
             if (s19Actual === undefined) {
                 this.pvRunHistory = undefined;
-                await this.setState('pvControl.s9RunEligibility', { val: 'unavailable: S19 actual power missing', ack: true });
-                await this.setState('pvControl.s19RunEligibility', { val: 'unavailable: S19 actual power missing', ack: true });
+                await this.setState('pvControl.s9RunEligibility', {
+                    val: 'unavailable: S19 actual power missing',
+                    ack: true,
+                });
+                await this.setState('pvControl.s19RunEligibility', {
+                    val: 'unavailable: S19 actual power missing',
+                    ack: true,
+                });
             } else {
                 this.pvRunHistory = runEligibility;
                 await this.setState('pvControl.s9RunEligibility', { val: runEligibility.s9, ack: true });

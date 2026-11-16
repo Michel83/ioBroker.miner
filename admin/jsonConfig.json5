@@ -1,182 +1,181 @@
-
 {
-  "i18n": true,
-  "type": "tabs",
-  "items": {
-    "_deviceManager": {
-      "type": "panel",
-      "label": "Devices",
-      "items": {
-        "_dm": {
-          "type": "deviceManager",
-          "sm": 12,
-          "style": {
-            "width": "100%",
-            "height": "100%",
-            "overflow": "hidden"
-          }
-        }
-      },
-      "style": {
-        "width": "100%",
-        "height": "100%",
-        "overflow": "hidden"
-      },
-      "innerStyle": {
-        "width": "100%",
-        "height": "100%",
-        "overflow": "hidden"
-      }
+    i18n: true,
+    type: 'tabs',
+    items: {
+        _deviceManager: {
+            type: 'panel',
+            label: 'Devices',
+            items: {
+                _dm: {
+                    type: 'deviceManager',
+                    sm: 12,
+                    style: {
+                        width: '100%',
+                        height: '100%',
+                        overflow: 'hidden',
+                    },
+                },
+            },
+            style: {
+                width: '100%',
+                height: '100%',
+                overflow: 'hidden',
+            },
+            innerStyle: {
+                width: '100%',
+                height: '100%',
+                overflow: 'hidden',
+            },
+        },
+        _settings: {
+            type: 'panel',
+            label: 'Settings',
+            items: {
+                checkForUpdates: {
+                    type: 'checkbox',
+                    label: 'Check miners for available updates',
+                    help: 'Once a day, looks up the latest firmware/software version for supported miners from public release information. Never downloads or installs anything.',
+                    default: true,
+                    newLine: true,
+                    xs: 12,
+                    sm: 12,
+                    md: 12,
+                    lg: 12,
+                    xl: 12,
+                },
+            },
+        },
+        _pvControl: {
+            type: 'panel',
+            label: 'PV-Steuerung',
+            items: {
+                pvEnabled: {
+                    type: 'checkbox',
+                    label: 'PV-Automatik aktivieren',
+                    help: 'Derzeit nur Diagnosebetrieb: Diese Option aktiviert keine automatische Leistungsregelung. Miner- und Relaisbefehle bleiben gesperrt.',
+                    default: false,
+                    newLine: true,
+                    xs: 12,
+                    sm: 12,
+                    md: 12,
+                    lg: 12,
+                },
+                pvGridPowerId: {
+                    type: 'objectId',
+                    label: 'Datenpunkt Netzleistung',
+                    help: 'Positive Werte = Netzbezug, negative Werte = Einspeisung.',
+                    newLine: true,
+                    sm: 12,
+                    md: 6,
+                },
+                pvBatteryPowerId: {
+                    type: 'objectId',
+                    label: 'Datenpunkt Batterieleistung',
+                    help: 'Positive Werte = Entladung, negative Werte = Ladung.',
+                    newLine: true,
+                    sm: 12,
+                    md: 6,
+                },
+                pvBatterySocId: {
+                    type: 'objectId',
+                    label: 'Datenpunkt Batterie-SOC (%)',
+                    help: 'Für die V2.43-Batteriepriorität erforderlich. Fehlende oder veraltete Werte sperren die Sollwert-Diagnose.',
+                    newLine: true,
+                    sm: 12,
+                    md: 6,
+                },
+                pvS9TargetStateId: {
+                    type: 'objectId',
+                    label: 'Datenpunkt S9-Sollleistung (W)',
+                    help: 'Nur lesender Eingang für die vorläufige S9-Sollwert-Diagnose. Keine Minerbefehle.',
+                    newLine: true,
+                    sm: 12,
+                    md: 6,
+                },
+                pvS19TargetStateId: {
+                    type: 'objectId',
+                    label: 'Datenpunkt S19-Sollleistung (W)',
+                    help: 'Nur lesender Eingang für die vorläufige S19-Sollwert-Diagnose. Keine Minerbefehle.',
+                    newLine: true,
+                    sm: 12,
+                    md: 6,
+                },
+                pvS9RunningStateId: {
+                    type: 'objectId',
+                    label: 'S9 läuft (nur Diagnose)',
+                    sm: 12,
+                    md: 6,
+                },
+                pvS19RunningStateId: {
+                    type: 'objectId',
+                    label: 'S19 läuft (nur Diagnose)',
+                    sm: 12,
+                    md: 6,
+                },
+                pvS9ActualPowerId: {
+                    type: 'objectId',
+                    label: 'S9 Istleistung (W)',
+                    sm: 12,
+                    md: 6,
+                },
+                pvS19ActualPowerId: {
+                    type: 'objectId',
+                    label: 'S19 Istleistung (W)',
+                    sm: 12,
+                    md: 6,
+                },
+                pvInterval: {
+                    type: 'number',
+                    label: 'Regelintervall (Sekunden)',
+                    default: 120,
+                    min: 30,
+                    max: 600,
+                    newLine: true,
+                    sm: 12,
+                    md: 6,
+                },
+                pvReserve: {
+                    type: 'number',
+                    label: 'Netzreserve (W)',
+                    default: 200,
+                    min: 0,
+                    max: 2000,
+                    newLine: true,
+                    sm: 12,
+                    md: 6,
+                },
+                pvStartHour: {
+                    type: 'number',
+                    label: 'Betriebsbeginn (Stunde)',
+                    default: 12,
+                    min: 0,
+                    max: 23,
+                    newLine: true,
+                    sm: 12,
+                    md: 6,
+                },
+                pvEndHour: {
+                    type: 'number',
+                    label: 'Betriebsende (Stunde)',
+                    default: 20,
+                    min: 1,
+                    max: 24,
+                    newLine: true,
+                    sm: 12,
+                    md: 6,
+                },
+                pvMaxDataAge: {
+                    type: 'number',
+                    label: 'Maximales Messwertalter (Sekunden)',
+                    help: 'Veraltete Messwerte werden in der Diagnose verworfen. Die automatische PV-Regelung ist noch nicht aktiv.',
+                    default: 180,
+                    min: 30,
+                    max: 3600,
+                    newLine: true,
+                    sm: 12,
+                    md: 6,
+                },
+            },
+        },
     },
-    "_settings": {
-      "type": "panel",
-      "label": "Settings",
-      "items": {
-        "checkForUpdates": {
-          "type": "checkbox",
-          "label": "Check miners for available updates",
-          "help": "Once a day, looks up the latest firmware/software version for supported miners from public release information. Never downloads or installs anything.",
-          "default": true,
-          "newLine": true,
-          "xs": 12,
-          "sm": 12,
-          "md": 12,
-          "lg": 12,
-          "xl": 12
-        }
-      }
-    },
-    "_pvControl": {
-      "type": "panel",
-      "label": "PV-Steuerung",
-      "items": {
-        "pvEnabled": {
-          "type": "checkbox",
-          "label": "PV-Automatik aktivieren",
-          "help": "Derzeit nur Diagnosebetrieb: Diese Option aktiviert keine automatische Leistungsregelung. Miner- und Relaisbefehle bleiben gesperrt.",
-          "default": false,
-          "newLine": true,
-          "xs": 12,
-          "sm": 12,
-          "md": 12,
-          "lg": 12
-        },
-        "pvGridPowerId": {
-          "type": "objectId",
-          "label": "Datenpunkt Netzleistung",
-          "help": "Positive Werte = Netzbezug, negative Werte = Einspeisung.",
-          "newLine": true,
-          "sm": 12,
-          "md": 6
-        },
-        "pvBatteryPowerId": {
-          "type": "objectId",
-          "label": "Datenpunkt Batterieleistung",
-          "help": "Positive Werte = Entladung, negative Werte = Ladung.",
-          "newLine": true,
-          "sm": 12,
-          "md": 6
-        },
-        "pvBatterySocId": {
-          "type": "objectId",
-          "label": "Datenpunkt Batterie-SOC (%)",
-          "help": "Für die V2.43-Batteriepriorität erforderlich. Fehlende oder veraltete Werte sperren die Sollwert-Diagnose.",
-          "newLine": true,
-          "sm": 12,
-          "md": 6
-        },
-        "pvS9TargetStateId": {
-          "type": "objectId",
-          "label": "Datenpunkt S9-Sollleistung (W)",
-          "help": "Nur lesender Eingang für die vorläufige S9-Sollwert-Diagnose. Keine Minerbefehle.",
-          "newLine": true,
-          "sm": 12,
-          "md": 6
-        },
-        "pvS19TargetStateId": {
-          "type": "objectId",
-          "label": "Datenpunkt S19-Sollleistung (W)",
-          "help": "Nur lesender Eingang für die vorläufige S19-Sollwert-Diagnose. Keine Minerbefehle.",
-          "newLine": true,
-          "sm": 12,
-          "md": 6
-        },
-        "pvS9RunningStateId": {
-          "type": "objectId",
-          "label": "S9 läuft (nur Diagnose)",
-          "sm": 12,
-          "md": 6
-        },
-        "pvS19RunningStateId": {
-          "type": "objectId",
-          "label": "S19 läuft (nur Diagnose)",
-          "sm": 12,
-          "md": 6
-        },
-        "pvS9ActualPowerId": {
-          "type": "objectId",
-          "label": "S9 Istleistung (W)",
-          "sm": 12,
-          "md": 6
-        },
-        "pvS19ActualPowerId": {
-          "type": "objectId",
-          "label": "S19 Istleistung (W)",
-          "sm": 12,
-          "md": 6
-        },
-        "pvInterval": {
-          "type": "number",
-          "label": "Regelintervall (Sekunden)",
-          "default": 120,
-          "min": 30,
-          "max": 600,
-          "newLine": true,
-          "sm": 12,
-          "md": 6
-        },
-        "pvReserve": {
-          "type": "number",
-          "label": "Netzreserve (W)",
-          "default": 200,
-          "min": 0,
-          "max": 2000,
-          "newLine": true,
-          "sm": 12,
-          "md": 6
-        },
-        "pvStartHour": {
-          "type": "number",
-          "label": "Betriebsbeginn (Stunde)",
-          "default": 12,
-          "min": 0,
-          "max": 23,
-          "newLine": true,
-          "sm": 12,
-          "md": 6
-        },
-        "pvEndHour": {
-          "type": "number",
-          "label": "Betriebsende (Stunde)",
-          "default": 20,
-          "min": 1,
-          "max": 24,
-          "newLine": true,
-          "sm": 12,
-          "md": 6
-        },
-        "pvMaxDataAge": {
-          "type": "number",
-          "label": "Maximales Messwertalter (Sekunden)",
-          "help": "Veraltete Messwerte werden in der Diagnose verworfen. Die automatische PV-Regelung ist noch nicht aktiv.",
-          "default": 180,
-          "min": 30,
-          "max": 3600,
-          "newLine": true,
-          "sm": 12,
-          "md": 6
-        }
-      }
-    }
-  }
 }
