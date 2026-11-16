@@ -231,7 +231,7 @@ interface CustomFeatureTestAdapter {
     minerManager: {
         getMiner: (id: string) => object | undefined;
         hasMiner: (id: string) => boolean;
-        withExclusiveMiner: (
+        withExclusiveMinerCommand: (
             id: string,
             operation: (miner: {
                 setCustomFeature: (id: string, value: unknown) => Promise<unknown>;
