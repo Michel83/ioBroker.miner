@@ -1376,7 +1376,30 @@ export class MinerAdapter extends utils.Adapter {
                                     stoppedAt: Date.now(),
                                     relayOffConfirmed: true,
                                 };
-                                await this.setState('pvControl.lastSafeStop', {
+                                const recordPath = `pvControl.miners.${deviceId}.lastSafeStop`;
+                                await this.extendObject('pvControl.miners', {
+                                    type: 'channel',
+                                    common: { name: 'PV miner shutdown records' },
+                                    native: {},
+                                });
+                                await this.extendObject(`pvControl.miners.${deviceId}`, {
+                                    type: 'channel',
+                                    common: { name: `PV shutdown record for ${settings.name}` },
+                                    native: {},
+                                });
+                                await this.extendObject(recordPath, {
+                                    type: 'state',
+                                    common: {
+                                        name: 'Last confirmed safe stop (JSON)',
+                                        type: 'string',
+                                        role: 'json',
+                                        read: true,
+                                        write: false,
+                                        def: '',
+                                    },
+                                    native: {},
+                                });
+                                await this.setState(recordPath, {
                                     val: JSON.stringify(record),
                                     ack: true,
                                 });
