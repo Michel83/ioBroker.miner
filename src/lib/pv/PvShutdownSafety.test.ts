@@ -448,6 +448,30 @@ describe('PV automatic restart eligibility', () => {
         expect(isPvRestartAllowed({ ...valid(), gridPower: undefined })).to.equal(false);
     });
 
+    it('rejects NaN and infinite grid or battery readings', () => {
+        for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+            expect(isPvRestartAllowed({ ...valid(), gridPower: invalid })).to.equal(false);
+            expect(isPvRestartAllowed({ ...valid(), batteryPower: invalid })).to.equal(false);
+        }
+    });
+
+    it('rejects stale, future and invalid telemetry timestamps', () => {
+        for (const invalid of [now - 15_001, now + 1, Number.NaN, Number.POSITIVE_INFINITY]) {
+            expect(isPvRestartAllowed({ ...valid(), gridTimestamp: invalid })).to.equal(false);
+            expect(isPvRestartAllowed({ ...valid(), batteryTimestamp: invalid })).to.equal(false);
+        }
+    });
+
+    it('rejects invalid PV power thresholds and reserve values', () => {
+        for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+            expect(isPvRestartAllowed({ ...valid(), minimumStartWatts: invalid })).to.equal(false);
+            expect(isPvRestartAllowed({ ...valid(), reserveWatts: invalid })).to.equal(false);
+        }
+        expect(isPvRestartAllowed({ ...valid(), minimumStartWatts: 0 })).to.equal(false);
+        expect(isPvRestartAllowed({ ...valid(), minimumStartWatts: -1 })).to.equal(false);
+        expect(isPvRestartAllowed({ ...valid(), reserveWatts: -1 })).to.equal(false);
+    });
+
     it('rejects insufficient export or battery discharge', () => {
         expect(isPvRestartAllowed({ ...valid(), gridPower: -1900 })).to.equal(false);
         expect(isPvRestartAllowed({ ...valid(), batteryPower: 800 })).to.equal(false);
