@@ -9,11 +9,11 @@ describe('MinerManager PV command interlock', () => {
         const calls: string[] = [];
         const miner = {
             settings: { id },
-            start: async () => { calls.push('start'); },
-            stop: async () => { calls.push('stop'); },
-            setProfile: async () => { calls.push('profile'); },
-            setPowerTarget: async () => { calls.push('powerTarget'); },
-            setCustomFeature: async () => { calls.push('custom'); return true; },
+            start: () => { calls.push('start'); return Promise.resolve(); },
+            stop: () => { calls.push('stop'); return Promise.resolve(); },
+            setProfile: () => { calls.push('profile'); return Promise.resolve(); },
+            setPowerTarget: () => { calls.push('powerTarget'); return Promise.resolve(); },
+            setCustomFeature: () => { calls.push('custom'); return Promise.resolve(true); },
         } as unknown as ReturnType<MinerManager['getMiners']>[number];
         // Test-only miner: no hardware connections or network calls.
         (manager as unknown as { miners: typeof miner[] }).miners.push(miner);
