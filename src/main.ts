@@ -21,7 +21,8 @@ import type { MinerStats } from './lib/miner/model/MinerStats';
 import { asyncDynamicInterval, setTimerBackend, type AsyncIntervalReturnType } from './lib/utils/delay';
 import { PvShutdownConfirmation, isPvShutdownSafe, isPvStopRestorationConsistent } from './lib/pv/PvShutdownSafety';
 import { calculatePvV243 } from './lib/pv/PvRegulationV243';
-import { decidePvTargetV243, type PvMinerKindV243 } from './lib/pv/PvTargetRegulationV243';
+import type { PvMinerKindV243 } from './lib/pv/PvTargetRegulationV243';
+import { PvTargetDiagnosticV243 } from './lib/pv/PvTargetDiagnosticV243';
 import { UpdateSources } from './lib/update/UpdateSources';
 import { runUpdateChecks, type UpdateCheckSummary } from './lib/update/runUpdateChecks';
 import type { UpdateCheckContext, UpdateCheckResult } from './lib/miner/model/UpdateCheckResult';
@@ -48,6 +49,7 @@ export class MinerAdapter extends utils.Adapter {
     private updateCheckHandle: AsyncIntervalReturnType | undefined;
     private pvMonitorTimer: ReturnType<typeof setInterval> | undefined;
     private pvMonitorBusy = false;
+    private readonly pvTargetDiagnostic = new PvTargetDiagnosticV243();
     private pvMonitorWarning = '';
     private readonly pvSafeStops = new Set<string>();
     private readonly pvRelayOffMiners = new Set<string>();
@@ -1318,15 +1320,16 @@ export class MinerAdapter extends utils.Adapter {
                     : 'Missing, stale or invalid V2.43 input; commands locked',
                 ack: true,
             });
-            // Observe targets only. No commands, no inferred running state and no timer advancement.
-            // Stabilization and restart protection require historical state and therefore remain
-            // provisional until a separate, tested diagnostic state machine is implemented.
+            // Observe targets only; historical target changes are not proof of a miner restart.
             for (const miner of ['S9', 'S19'] as PvMinerKindV243[]) {
                 const targetId = miner === 'S9' ? this.config.pvS9TargetStateId : this.config.pvS19TargetStateId;
                 const currentTarget = await this.readFreshPvValue(targetId || '', ageMs);
+                if (!v243 || currentTarget === undefined) {
+                    this.pvTargetDiagnostic.reset(miner);
+                }
                 const decision =
                     v243 && currentTarget !== undefined
-                        ? decidePvTargetV243({
+                        ? this.pvTargetDiagnostic.evaluate({
                               miner,
                               currentTargetWatts: currentTarget,
                               effectiveGridWatts: v243.effectiveGridWatts,
@@ -1341,7 +1344,7 @@ export class MinerAdapter extends utils.Adapter {
                 });
                 await this.setState(`pvControl.${prefix}Decision`, {
                     val: decision
-                        ? `${decision.action}: ${decision.reason} (provisional; no commands)`
+                        ? `${decision.action}: ${decision.reason} (observed targets only; no commands)`
                         : 'Unavailable: missing or stale target/PV measurement',
                     ack: true,
                 });
