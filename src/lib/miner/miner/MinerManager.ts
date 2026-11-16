@@ -230,6 +230,7 @@ export class MinerManager {
             });
         } catch (e) {
             logger.error(`[setProfile] failed to set profile "${profile}" on miner with id ${id}: ${String(e)}`);
+            throw e;
         }
     }
 
