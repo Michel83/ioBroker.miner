@@ -371,3 +371,47 @@ export function isPvRelayOffConfirmed(
         now - relayTimestamp <= maxAgeMs
     );
 }
+
+/**
+ * Tracks distinct post-relay-OFF power measurements.
+ * A relay acknowledgement alone never confirms that power was removed.
+ */
+export class PvRelayOffPowerConfirmation {
+    private lastPowerTimestamp: number;
+    private consecutiveNearZero = 0;
+
+    public constructor(private readonly requestedAt: number) {
+        this.lastPowerTimestamp = requestedAt;
+    }
+
+    public update(
+        power: number | undefined,
+        powerTimestamp: number | undefined,
+        relayConfirmedOff: boolean,
+        now: number,
+        maxAgeMs: number,
+    ): boolean {
+        if (!relayConfirmedOff) {
+            this.consecutiveNearZero = 0;
+            return false;
+        }
+        if (
+            power === undefined ||
+            !Number.isFinite(power) ||
+            powerTimestamp === undefined ||
+            !Number.isFinite(powerTimestamp) ||
+            powerTimestamp <= this.lastPowerTimestamp ||
+            powerTimestamp > now ||
+            now - powerTimestamp > maxAgeMs
+        ) {
+            return false;
+        }
+        this.lastPowerTimestamp = powerTimestamp;
+        this.consecutiveNearZero = power >= 0 && power <= 5 ? this.consecutiveNearZero + 1 : 0;
+        return this.consecutiveNearZero >= 3;
+    }
+
+    public reset(): void {
+        this.consecutiveNearZero = 0;
+    }
+}
