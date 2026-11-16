@@ -21,6 +21,7 @@ import type { MinerStats } from './lib/miner/model/MinerStats';
 import { asyncDynamicInterval, setTimerBackend, type AsyncIntervalReturnType } from './lib/utils/delay';
 import { PvShutdownConfirmation, isPvShutdownSafe, isPvStopRestorationConsistent } from './lib/pv/PvShutdownSafety';
 import { calculatePvV243 } from './lib/pv/PvRegulationV243';
+import { decidePvTargetV243, type PvMinerKindV243 } from './lib/pv/PvTargetRegulationV243';
 import { UpdateSources } from './lib/update/UpdateSources';
 import { runUpdateChecks, type UpdateCheckSummary } from './lib/update/runUpdateChecks';
 import type { UpdateCheckContext, UpdateCheckResult } from './lib/miner/model/UpdateCheckResult';
@@ -1201,6 +1202,10 @@ export class MinerAdapter extends utils.Adapter {
             v243Available: { name: 'V2.43 available PV power', type: 'number', unit: 'W' },
             v243EffectiveGrid: { name: 'V2.43 effective grid power', type: 'number', unit: 'W' },
             v243Status: { name: 'V2.43 calculation status (read-only)', type: 'string' },
+            s9SuggestedTarget: { name: 'S9 proposed target (diagnostic only)', type: 'number', unit: 'W' },
+            s9Decision: { name: 'S9 proposed action (diagnostic only)', type: 'string' },
+            s19SuggestedTarget: { name: 'S19 proposed target (diagnostic only)', type: 'number', unit: 'W' },
+            s19Decision: { name: 'S19 proposed action (diagnostic only)', type: 'string' },
             status: { name: 'PV monitor status', type: 'string' },
         };
         for (const [key, common] of Object.entries(states)) {
@@ -1313,6 +1318,32 @@ export class MinerAdapter extends utils.Adapter {
                     : 'Missing, stale or invalid V2.43 input; commands locked',
                 ack: true,
             });
+            // Observe targets only. No commands, no inferred running state and no timer advancement.
+            // Stabilization and restart protection require historical state and therefore remain
+            // provisional until a separate, tested diagnostic state machine is implemented.
+            for (const miner of ['S9', 'S19'] as PvMinerKindV243[]) {
+                const targetId = miner === 'S9' ? this.config.pvS9TargetStateId : this.config.pvS19TargetStateId;
+                const currentTarget = await this.readFreshPvValue(targetId || '', ageMs);
+                const decision =
+                    v243 && currentTarget !== undefined
+                        ? decidePvTargetV243({
+                              miner,
+                              currentTargetWatts: currentTarget,
+                              effectiveGridWatts: v243.effectiveGridWatts,
+                              batteryPowerWatts: battery!,
+                              now: Date.now(),
+                          })
+                        : undefined;
+                const prefix = miner === 'S9' ? 's9' : 's19';
+                await this.setState(`pvControl.${prefix}SuggestedTarget`, {
+                    val: decision?.action === 'set-target' ? (decision.targetWatts ?? null) : null,
+                    ack: true,
+                });
+                await this.setState(`pvControl.${prefix}Decision`, {
+                    val: decision ? `${decision.action}: ${decision.reason} (provisional; no commands)` : 'Unavailable: missing or stale target/PV measurement',
+                    ack: true,
+                });
+            }
             const status = !valid
                 ? 'Missing or stale PV measurements; no commands sent'
                 : 'Read-only diagnostics active; miner and relay commands locked';
