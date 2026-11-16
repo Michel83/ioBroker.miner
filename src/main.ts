@@ -54,6 +54,7 @@ export class MinerAdapter extends utils.Adapter {
     private readonly pvTargetDiagnostic = new PvTargetDiagnosticV243();
     private pvMonitorWarning = '';
     private pvRunHistory: PvRunEligibilityV243 | undefined;
+    private pvRunLastObservedAt: number | undefined;
     private readonly pvSafeStops = new Set<string>();
     private readonly pvRelayOffMiners = new Set<string>();
     private pvShuttingDown = false;
@@ -1381,9 +1382,19 @@ export class MinerAdapter extends utils.Adapter {
                 this.readFreshPvValue(this.config.pvS19ActualPowerId || '', ageMs),
                 this.readFreshPvValue(this.config.pvS9TargetStateId || '', ageMs),
             ]);
+            const observationNow = Date.now();
+            // A missing monitor cycle invalidates consecutive eligibility observations.
+            if (
+                this.pvRunLastObservedAt === undefined ||
+                observationNow < this.pvRunLastObservedAt ||
+                observationNow - this.pvRunLastObservedAt > Math.max(30, Number(this.config.pvInterval) || 120) * 1500
+            ) {
+                this.pvRunHistory = undefined;
+            }
+            this.pvRunLastObservedAt = observationNow;
             const runEligibility = evaluatePvRunEligibilityV243({
-                now: Date.now(),
-                hour: new Date().getHours(),
+                now: observationNow,
+                hour: new Date(observationNow).getHours(),
                 availableWatts: v243?.availableWatts,
                 s9Running,
                 s19Running,
