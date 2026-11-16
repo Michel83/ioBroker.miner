@@ -17,6 +17,10 @@ describe('PV restart unlock and miner command queue (simulation only)', () => {
                     calls.push(`start:${id}`);
                     return Promise.resolve();
                 },
+                stop: () => {
+                    calls.push(`stop:${id}`);
+                    return Promise.resolve();
+                },
             } as unknown as ReturnType<MinerManager['getMiners']>[number];
             (manager as unknown as { miners: typeof miner[] }).miners.push(miner);
         }
@@ -121,4 +125,65 @@ describe('PV restart unlock and miner command queue (simulation only)', () => {
         expect(calls).to.deep.equal(['start:s9']);
         expect(locks.has('s19')).to.equal(true);
     });
+
+    it('keeps S19 locked if PV export disappears while S9 is independently stopped', async () => {
+        const { manager, locks, calls } = setup();
+        let release!: () => void;
+        const gate = new Promise<void>(resolve => {
+            release = resolve;
+        });
+        let entered!: () => void;
+        const waiting = new Promise<void>(resolve => {
+            entered = resolve;
+        });
+        const s19 = manager.withExclusiveMiner('s19', async () => {
+            entered();
+            await gate;
+            const changed = evidence('s19', locks);
+            changed.restart.gridPower = -100;
+            expect(isPvRestartUnlockCandidate(changed)).to.equal(false);
+        });
+        await waiting;
+        // A safety stop for S9 must not depend on the S19 command queue.
+        await manager.stopMiner('s9');
+        release();
+        await s19;
+        expect(await manager.startMiner('s19').then(() => false, () => true)).to.equal(true);
+        expect(locks.has('s19')).to.equal(true);
+        expect(locks.has('s9')).to.equal(true);
+        expect(calls).to.deep.equal(['stop:s9']);
+    });
+
+    it('does not release either miner when shutdown begins during simultaneous restart checks', async () => {
+        const { manager, locks, calls } = setup();
+        let shuttingDown = false;
+        let release!: () => void;
+        const gate = new Promise<void>(resolve => {
+            release = resolve;
+        });
+        let entered = 0;
+        let bothEntered!: () => void;
+        const waiting = new Promise<void>(resolve => {
+            bothEntered = resolve;
+        });
+        const check = (id: string): Promise<void> => manager.withExclusiveMiner(id, async () => {
+            entered += 1;
+            if (entered === 2) {
+                bothEntered();
+            }
+            await gate;
+            const current = { ...evidence(id, locks), adapterShuttingDown: shuttingDown };
+            expect(isPvRestartUnlockCandidate(current)).to.equal(false);
+        });
+        const s9 = check('s9');
+        const s19 = check('s19');
+        await waiting;
+        shuttingDown = true;
+        release();
+        await Promise.all([s9, s19]);
+        expect(locks.has('s9')).to.equal(true);
+        expect(locks.has('s19')).to.equal(true);
+        expect(calls).to.deep.equal([]);
+    });
+
 });
