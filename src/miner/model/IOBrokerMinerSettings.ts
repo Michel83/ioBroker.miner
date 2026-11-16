@@ -35,6 +35,8 @@ export interface MinerPvControlSettings {
     relayFeedbackStateId?: string;
     /** Maximum seconds to await confirmed relay OFF and three new near-zero readings (default: 90). */
     relayOffConfirmationTimeout?: number;
+    /** Maximum allowed gap between fresh power readings in seconds (default: 15). */
+    powerSampleMaxGap?: number;
     /** Value to write to the relay to switch it on. */
     relayOnValue: boolean;
     /** Delay after enabling the relay before starting the miner, in seconds. */
