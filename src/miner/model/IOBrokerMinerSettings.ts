@@ -31,6 +31,10 @@ export interface MinerPvControlSettings {
     powerOffset: number;
     /** Optional ioBroker state ID of an external power relay. */
     relayStateId: string;
+    /** Optional independent relay feedback state ID; defaults to relayStateId for existing configurations. */
+    relayFeedbackStateId?: string;
+    /** Maximum seconds to await confirmed relay OFF and three new near-zero readings (default: 90). */
+    relayOffConfirmationTimeout?: number;
     /** Value to write to the relay to switch it on. */
     relayOnValue: boolean;
     /** Delay after enabling the relay before starting the miner, in seconds. */
