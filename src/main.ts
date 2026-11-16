@@ -1340,7 +1340,9 @@ export class MinerAdapter extends utils.Adapter {
                     ack: true,
                 });
                 await this.setState(`pvControl.${prefix}Decision`, {
-                    val: decision ? `${decision.action}: ${decision.reason} (provisional; no commands)` : 'Unavailable: missing or stale target/PV measurement',
+                    val: decision
+                        ? `${decision.action}: ${decision.reason} (provisional; no commands)`
+                        : 'Unavailable: missing or stale target/PV measurement',
                     ack: true,
                 });
             }
