@@ -381,7 +381,10 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
                         type: 'objectId',
                         customFilter: { common: { type: 'boolean' } },
                         newLine: true,
-                        label: { en: 'Relay feedback state ID (optional)', de: 'Rückmeldung Schaltaktor: Datenpunkt-ID (optional)' },
+                        label: {
+                            en: 'Relay feedback state ID (optional)',
+                            de: 'Rückmeldung Schaltaktor: Datenpunkt-ID (optional)',
+                        },
                         hidden: "data.category !== 'miner'",
                     },
                     pvRelayOffConfirmationTimeout: {
@@ -753,7 +756,8 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
             shutdownDelay: nonNegative(result.pvShutdownDelay, 0),
             powerStateId: typeof result.pvPowerStateId === 'string' ? result.pvPowerStateId.trim() : '',
             runningStateId: typeof result.pvRunningStateId === 'string' ? result.pvRunningStateId.trim() : '',
-            relayFeedbackStateId: typeof result.pvRelayFeedbackStateId === 'string' ? result.pvRelayFeedbackStateId.trim() : '',
+            relayFeedbackStateId:
+                typeof result.pvRelayFeedbackStateId === 'string' ? result.pvRelayFeedbackStateId.trim() : '',
             relayOffConfirmationTimeout: Math.max(90, nonNegative(result.pvRelayOffConfirmationTimeout, 90)),
         };
 
