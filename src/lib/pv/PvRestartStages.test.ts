@@ -9,7 +9,9 @@ describe('PV restart distinct relay OFF and ON stages (diagnostic only)', () => 
     const now = 1_800_000_000_000;
     const poweredOnAt = now - 120_000;
     const values = (): PvPostPowerOnApproval => ({
-        prePowerOnApproved: true,
+        minerId: 's9',
+        adapterSessionId: 'session-current',
+        prePowerOnEvidence: { minerId: 's9', adapterSessionId: 'session-current', approvedAt: poweredOnAt - 1000, expiresAt: now + 5000 },
         relayPoweredOnAt: poweredOnAt,
         restart: {
             enabled: true,
@@ -44,7 +46,7 @@ describe('PV restart distinct relay OFF and ON stages (diagnostic only)', () => 
     });
 
     it('requires prior OFF-stage approval before considering ON-stage evidence', () => {
-        expect(isPvPostPowerOnApproved({ ...values(), prePowerOnApproved: false })).to.equal(false);
+        expect(isPvPostPowerOnApproved({ ...values(), prePowerOnEvidence: undefined })).to.equal(false);
     });
 
     it('requires new grid and battery samples after relay ON', () => {
