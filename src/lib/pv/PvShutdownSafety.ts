@@ -187,3 +187,39 @@ export function isPvRestartAllowed(values: PvRestartMeasurements): boolean {
     const availableWatts = -values.gridPower - values.reserveWatts - Math.max(0, values.batteryPower);
     return availableWatts >= values.minimumStartWatts;
 }
+
+/** Evidence required before issuing a miner start command after relay power-on. */
+export interface PvStartReadiness {
+    relayOn: boolean;
+    relayTimestamp: number | undefined;
+    relayEnabledAt: number | undefined;
+    minerReachable: boolean;
+    minerSeenAt: number | undefined;
+    now: number;
+    maxAgeMs: number;
+    startupDelayMs: number;
+}
+
+/** Fail closed if relay feedback, boot delay or miner communication is uncertain. */
+export function isPvStartReady(values: PvStartReadiness): boolean {
+    const fresh = (timestamp: number | undefined): boolean =>
+        timestamp !== undefined &&
+        Number.isFinite(timestamp) &&
+        timestamp <= values.now &&
+        values.now - timestamp <= values.maxAgeMs;
+
+    return (
+        values.relayOn &&
+        values.minerReachable &&
+        fresh(values.relayTimestamp) &&
+        fresh(values.minerSeenAt) &&
+        values.relayEnabledAt !== undefined &&
+        Number.isFinite(values.relayEnabledAt) &&
+        values.relayEnabledAt <= values.now &&
+        values.minerSeenAt !== undefined &&
+        values.minerSeenAt > values.relayEnabledAt &&
+        Number.isFinite(values.startupDelayMs) &&
+        values.startupDelayMs >= 0 &&
+        values.now - values.relayEnabledAt >= values.startupDelayMs
+    );
+}
