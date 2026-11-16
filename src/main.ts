@@ -30,6 +30,7 @@ import {
 import { calculatePvV243 } from './lib/pv/PvRegulationV243';
 import { confirmedPvRelayOn } from './lib/pv/PvRelayFeedbackDiagnostic';
 import { pvRestartCountdownSeconds } from './lib/pv/PvRestartCountdown';
+import { pvRestartSafetyReason } from './lib/pv/PvRestartSafetyReason';
 import { evaluatePvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
 import type { PvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
 import type { PvMinerKindV243 } from './lib/pv/PvTargetRegulationV243';
@@ -1503,6 +1504,26 @@ export class MinerAdapter extends utils.Adapter {
                     }
                 }
                 await this.setState(`${base}.restartCountdown`, { val: countdown, ack: true });
+                // The lock is the authoritative in-memory command guard.
+                // The reason below only explains observations and cannot unlock it.
+                const locked = this.pvRelayOffMiners.has(settings.settings.id) ||
+                    this.pvSafeStops.has(settings.settings.id) || this.pvShuttingDown;
+                const [observedGrid, observedBattery] = await Promise.all([
+                    this.readFreshPvValue(this.config.pvGridPowerId || '', ageMs),
+                    this.readFreshPvValue(this.config.pvBatteryPowerId || '', ageMs),
+                ]);
+                const reason = pvRestartSafetyReason({
+                    locked,
+                    shuttingDown: this.pvShuttingDown,
+                    relayOn,
+                    countdown,
+                    gridPower: observedGrid,
+                    batteryPower: observedBattery,
+                    reserveWatts: Math.max(0, Number(this.config.pvReserve) || 0),
+                    minimumStartWatts: Number(pv.minPower),
+                });
+                await this.setState(`${base}.restartLocked`, { val: locked, ack: true });
+                await this.setState(`${base}.safetyReason`, { val: reason, ack: true });
             }
             const grid = await this.readFreshPvValue(this.config.pvGridPowerId || '', ageMs);
             const battery = await this.readFreshPvValue(this.config.pvBatteryPowerId || '', ageMs);
