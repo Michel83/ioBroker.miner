@@ -350,3 +350,24 @@ export function isPvStopRestorationConsistent(values: PvStopRestoration): boolea
         values.power <= 5
     );
 }
+
+/** Relay OFF feedback must be a fresh acknowledgement newer than the OFF request. */
+export function isPvRelayOffConfirmed(
+    relayValue: unknown,
+    relayTimestamp: number | undefined,
+    relayAck: boolean | undefined,
+    relayOnValue: boolean,
+    requestedAt: number,
+    now: number,
+    maxAgeMs: number,
+): boolean {
+    return (
+        relayValue === !relayOnValue &&
+        relayAck === true &&
+        relayTimestamp !== undefined &&
+        Number.isFinite(relayTimestamp) &&
+        relayTimestamp > requestedAt &&
+        relayTimestamp <= now &&
+        now - relayTimestamp <= maxAgeMs
+    );
+}
