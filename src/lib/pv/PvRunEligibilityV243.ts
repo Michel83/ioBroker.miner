@@ -34,7 +34,16 @@ const validTime = (value: number | undefined, now: number): value is number =>
  * @param input - current observations and prior consecutive eligibility timestamps
  */
 export function evaluatePvRunEligibilityV243(input: PvRunEligibilityInputV243): PvRunEligibilityV243 {
-    const { now, hour, availableWatts: available, s9Running, s19Running, s9TargetWatts, s9ActualWatts, gridPowerWatts } = input;
+    const {
+        now,
+        hour,
+        availableWatts: available,
+        s9Running,
+        s19Running,
+        s9TargetWatts,
+        s9ActualWatts,
+        gridPowerWatts,
+    } = input;
     if (
         !Number.isFinite(now) ||
         now < 0 ||
@@ -67,18 +76,16 @@ export function evaluatePvRunEligibilityV243(input: PvRunEligibilityInputV243): 
     }
 
     if (s9Running) {
-        const lowSince = available < 500
-            ? (validTime(input.s9LowPowerSince, now) ? input.s9LowPowerSince : now)
-            : undefined;
+        const lowSince =
+            available < 500 ? (validTime(input.s9LowPowerSince, now) ? input.s9LowPowerSince : now) : undefined;
         result.s9LowPowerSince = lowSince;
         if (lowSince !== undefined) {
             result.s9 = now - lowSince >= 120_000 ? 'low-power-stop-threshold-met' : 'low-power-wait';
         }
     }
     if (s19Running) {
-        const lowSince = available < 1450
-            ? (validTime(input.s19LowPowerSince, now) ? input.s19LowPowerSince : now)
-            : undefined;
+        const lowSince =
+            available < 1450 ? (validTime(input.s19LowPowerSince, now) ? input.s19LowPowerSince : now) : undefined;
         result.s19LowPowerSince = lowSince;
         if (lowSince !== undefined) {
             result.s19 = now - lowSince >= 120_000 ? 'low-power-stop-threshold-met' : 'low-power-wait';
@@ -87,7 +94,9 @@ export function evaluatePvRunEligibilityV243(input: PvRunEligibilityInputV243): 
     if (s9Running && !s19Running) {
         const eligible = s9TargetWatts >= 1800 && s9ActualWatts >= 1200 && gridPowerWatts <= -300;
         const since = eligible
-            ? (validTime(input.s9ToS19CandidateSince, now) ? input.s9ToS19CandidateSince : now)
+            ? validTime(input.s9ToS19CandidateSince, now)
+                ? input.s9ToS19CandidateSince
+                : now
             : undefined;
         result.s9ToS19CandidateSince = since;
         if (since !== undefined) {
