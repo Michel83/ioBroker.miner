@@ -1032,3 +1032,26 @@ describe('PV command lock after simulated adapter restart', () => {
         expect(isPvMinerCommandAllowed(minerId, new Set<string>(), restartedInstanceLock, false)).to.equal(false);
     });
 });
+
+describe('PV command policy for custom features and state controls', () => {
+    const minerId = 'pv-miner-1';
+
+    it('rejects all guarded command types while the restart lock is active', () => {
+        const safeStops = new Set<string>();
+        const restartLocked = new Set([minerId]);
+        for (const command of ['start', 'profile', 'powerTarget', 'customFeature']) {
+            expect(
+                isPvMinerCommandAllowed(minerId, safeStops, restartLocked, false),
+                command,
+            ).to.equal(false);
+        }
+    });
+
+    it('rejects guarded commands during a safe stop even without a restart lock', () => {
+        expect(isPvMinerCommandAllowed(minerId, new Set([minerId]), new Set<string>(), false)).to.equal(false);
+    });
+
+    it('permits commands only when no safety lock is active', () => {
+        expect(isPvMinerCommandAllowed(minerId, new Set<string>(), new Set<string>(), false)).to.equal(true);
+    });
+});
