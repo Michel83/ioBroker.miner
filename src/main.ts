@@ -1143,6 +1143,19 @@ export class MinerAdapter extends utils.Adapter {
                 native: {},
             });
         }
+        // Persistent, read-only diagnostic records. No saved record authorizes relay or miner commands.
+        await this.extendObject('pvControl.lastSafeStop', {
+            type: 'state',
+            common: {
+                name: 'Last confirmed PV safe stop (JSON)',
+                type: 'string',
+                role: 'json',
+                read: true,
+                write: false,
+                def: '',
+            },
+            native: {},
+        });
         await this.setState('pvControl.enabled', { val: this.config.pvEnabled === true, ack: true });
         const intervalSeconds = Math.max(30, Number(this.config.pvInterval) || 120);
         this.pvMonitorTimer = setInterval(() => {
