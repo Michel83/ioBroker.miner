@@ -502,6 +502,7 @@ describe('PV miner startup readiness', () => {
     const now = 1_800_000_000_000;
     const valid = (): PvStartReadiness => ({
         relayOn: true,
+        relayAck: true,
         relayTimestamp: now,
         relayEnabledAt: now - 120_000,
         minerReachable: true,
@@ -539,6 +540,7 @@ describe('PV startup command ordering', () => {
     const now = 1_800_000_000_000;
     const ready = (): PvStartReadiness => ({
         relayOn: true,
+        relayAck: true,
         relayTimestamp: now,
         relayEnabledAt: now - 120_000,
         minerReachable: true,
@@ -649,6 +651,7 @@ describe('PV startup lock remains fail-closed', () => {
     const now = 1_800_000_000_000;
     const ready = (): PvStartReadiness => ({
         relayOn: true,
+        relayAck: true,
         relayTimestamp: now,
         relayEnabledAt: now - 120_000,
         minerReachable: true,
@@ -1185,6 +1188,7 @@ describe('PV restart unlock candidate remains read-only', () => {
         },
         readiness: {
             relayOn: true,
+            relayAck: true,
             relayTimestamp: now,
             relayEnabledAt: relayPoweredOnAt,
             minerReachable: true,
@@ -1278,6 +1282,7 @@ describe('PV unlock transaction simulation (test-only, no adapter wiring)', () =
         },
         readiness: {
             relayOn: true,
+            relayAck: true,
             relayTimestamp: now,
             relayEnabledAt: poweredOnAt,
             minerReachable: true,
