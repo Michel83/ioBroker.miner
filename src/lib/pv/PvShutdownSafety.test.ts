@@ -521,6 +521,16 @@ describe('PV miner startup readiness', () => {
         expect(isPvStartReady({ ...valid(), relayTimestamp: now - 20_000 })).to.equal(false);
     });
 
+    it('rejects an unacknowledged relay ON state', () => {
+        expect(isPvStartReady({ ...valid(), relayAck: false })).to.equal(false);
+    });
+
+    it('rejects relay ON feedback at or before the ON request', () => {
+        const requestedAt = valid().relayEnabledAt;
+        expect(isPvStartReady({ ...valid(), relayTimestamp: requestedAt })).to.equal(false);
+        expect(isPvStartReady({ ...valid(), relayTimestamp: requestedAt! - 1 })).to.equal(false);
+    });
+
     it('blocks start until boot delay completes', () => {
         expect(isPvStartReady({ ...valid(), relayEnabledAt: now - 119_999 })).to.equal(false);
     });
