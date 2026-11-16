@@ -18,6 +18,9 @@ declare global {
             /** Battery power state: positive = discharge, negative = charge. */
             pvBatteryPowerId?: string;
 
+            /** Battery SOC state for read-only V2.43 diagnostics (0-100%). */
+            pvBatterySocId?: string;
+
             /** PV regulation interval in seconds (default: 120). */
             pvInterval?: number;
 
