@@ -401,7 +401,7 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
                         label: { en: 'Maximum power measurement gap (s)', de: 'Maximaler Abstand Leistungsmessung (s)' },
                         hidden: "data.category !== 'miner'",
                         min: 15,
-                        max: 300,
+                        max: 180,
                         step: 1,
                     },
                     pvRelayOnValue: {
@@ -769,7 +769,7 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
             relayFeedbackStateId:
                 typeof result.pvRelayFeedbackStateId === 'string' ? result.pvRelayFeedbackStateId.trim() : '',
             relayOffConfirmationTimeout: Math.max(90, nonNegative(result.pvRelayOffConfirmationTimeout, 90)),
-            powerSampleMaxGap: Math.min(300, Math.max(15, nonNegative(result.pvPowerSampleMaxGap, 15))),
+            powerSampleMaxGap: Math.min(180, Math.max(15, nonNegative(result.pvPowerSampleMaxGap, 15))),
         };
 
         const settings: IOBrokerMinerSettings = {
