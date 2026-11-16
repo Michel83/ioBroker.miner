@@ -48,6 +48,7 @@ export class MinerAdapter extends utils.Adapter {
     private pvMonitorBusy = false;
     private pvMonitorWarning = '';
     private readonly pvSafeStops = new Set<string>();
+    private readonly pvRelayOffMiners = new Set<string>();
     private pvShuttingDown = false;
 
     /**
@@ -82,7 +83,7 @@ export class MinerAdapter extends utils.Adapter {
         // this.on('message', this.onMessage.bind(this));
         this.on('unload', this.onUnload.bind(this));
 
-        this.minerManager.setCommandGuard(id => !this.pvSafeStops.has(id) && !this.pvShuttingDown);
+        this.minerManager.setCommandGuard(id => !this.pvSafeStops.has(id) && !this.pvRelayOffMiners.has(id) && !this.pvShuttingDown);
         this.deviceManagement = new MinerAdapterDeviceManagement(this);
     }
 
@@ -1338,6 +1339,7 @@ export class MinerAdapter extends utils.Adapter {
                         }
 
                         await this.setForeignStateAsync(pv.relayStateId, !pv.relayOnValue);
+                        this.pvRelayOffMiners.add(id);
                         this.log.info(`PV safe stop confirmed for ${settings.name}; relay switched OFF`);
                         return;
                     }
