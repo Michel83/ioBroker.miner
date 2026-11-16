@@ -52,6 +52,42 @@ describe('MinerManager PV command interlock', () => {
         expect(calls).to.deep.equal([]);
     });
 
+
+    it('keeps both PV miners locked after a simulated adapter restart', async () => {
+        const manager = new MinerManager();
+        const calls: string[] = [];
+        const ids = ['s9', 's19'];
+        for (const minerId of ids) {
+            const miner = {
+                settings: { id: minerId },
+                start: () => { calls.push(minerId); return Promise.resolve(); },
+                setPowerTarget: () => { calls.push(minerId); return Promise.resolve(); },
+            } as unknown as ReturnType<MinerManager['getMiners']>[number];
+            (manager as unknown as { miners: typeof miner[] }).miners.push(miner);
+        }
+
+        // A fresh adapter process starts with no active stop, but locks each
+        // configured PV miner before initializing its miner connection.
+        const restartLocked = new Set(ids);
+        manager.setCommandGuard(minerId => !restartLocked.has(minerId));
+
+        for (const minerId of ids) {
+            for (const operation of [
+                () => manager.startMiner(minerId),
+                () => manager.setPowerTarget(minerId, 1800),
+            ]) {
+                let rejected = false;
+                try {
+                    await operation();
+                } catch {
+                    rejected = true;
+                }
+                expect(rejected, minerId).to.equal(true);
+            }
+        }
+        expect(calls).to.deep.equal([]);
+    });
+
     it('still permits a safety stop while other commands are locked', async () => {
         const { manager, calls } = createManager();
         manager.setCommandGuard(() => false);
