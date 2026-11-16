@@ -446,7 +446,8 @@ export interface PvRestartUnlockCandidate {
     activeSafeStops: ReadonlySet<string>;
     adapterShuttingDown: boolean;
     relayPoweredOnAt: number | undefined;
-    prePowerOnApproved: boolean;
+    prePowerOnEvidence: PvPrePowerOnEvidence | undefined;
+    adapterSessionId: string;
     restart: PvRestartMeasurements;
     readiness: PvStartReadiness;
 }
@@ -457,6 +458,7 @@ export function isPvRestartUnlockCandidate(values: PvRestartUnlockCandidate): bo
         values.lockedMiners.has(values.minerId) &&
         !values.activeSafeStops.has(values.minerId) &&
         !values.adapterShuttingDown &&
+        values.prePowerOnEvidence?.minerId === values.minerId &&
         isPvPostPowerOnApproved(values)
     );
 }
@@ -468,7 +470,8 @@ export function isPvRestartUnlockCandidate(values: PvRestartUnlockCandidate): bo
  * must now be ON. Diagnostic only: no lock mutation or hardware commands.
  */
 export interface PvPostPowerOnApproval {
-    prePowerOnApproved: boolean;
+    prePowerOnEvidence: PvPrePowerOnEvidence | undefined;
+    adapterSessionId: string;
     relayPoweredOnAt: number | undefined;
     restart: PvRestartMeasurements;
     readiness: PvStartReadiness;
@@ -479,7 +482,13 @@ export function isPvPostPowerOnApproved(values: PvPostPowerOnApproval): boolean 
     const restart = values.restart;
     const readiness = values.readiness;
     return (
-        values.prePowerOnApproved &&
+        isPvPrePowerOnEvidenceCurrent(
+            values.prePowerOnEvidence,
+            values.prePowerOnEvidence?.minerId ?? '',
+            values.adapterSessionId,
+            poweredOnAt,
+            restart.now,
+        ) &&
         poweredOnAt !== undefined &&
         Number.isFinite(poweredOnAt) &&
         readiness.relayEnabledAt === poweredOnAt &&
