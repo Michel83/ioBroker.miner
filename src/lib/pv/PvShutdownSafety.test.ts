@@ -1165,9 +1165,10 @@ describe('PV restart unlock candidate remains read-only', () => {
         activeSafeStops: new Set<string>(),
         adapterShuttingDown: false,
         relayPoweredOnAt,
+        prePowerOnApproved: true,
         restart: {
             enabled: true,
-            relayConfirmedOff: true,
+            relayConfirmedOff: false,
             gridPower: -2500,
             batteryPower: 0,
             gridTimestamp: now,
@@ -1196,6 +1197,18 @@ describe('PV restart unlock candidate remains read-only', () => {
         expect(isPvRestartUnlockCandidate(candidate('s19'))).to.equal(true);
         expect(lockedMiners.has('s9')).to.equal(true);
         expect(lockedMiners.has('s19')).to.equal(true);
+    });
+
+    it('rejects missing pre-power-on approval without changing locks', () => {
+        const values = candidate('s9');
+        expect(isPvRestartUnlockCandidate({ ...values, prePowerOnApproved: false })).to.equal(false);
+        expect(lockedMiners.has('s9')).to.equal(true);
+    });
+
+    it('uses relay ON feedback rather than requiring contradictory live relay OFF', () => {
+        const values = candidate('s19');
+        expect(values.restart.relayConfirmedOff).to.equal(false);
+        expect(isPvRestartUnlockCandidate(values)).to.equal(true);
     });
 
     it('rejects measurements that predate relay power-on', () => {
@@ -1244,9 +1257,10 @@ describe('PV unlock transaction simulation (test-only, no adapter wiring)', () =
         activeSafeStops: new Set<string>(),
         adapterShuttingDown: false,
         relayPoweredOnAt: poweredOnAt,
+        prePowerOnApproved: true,
         restart: {
             enabled: true,
-            relayConfirmedOff: true,
+            relayConfirmedOff: false,
             gridPower: -2500,
             batteryPower: 0,
             gridTimestamp: now,
