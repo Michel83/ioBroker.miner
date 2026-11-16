@@ -101,6 +101,30 @@
           "sm": 12,
           "md": 6
         },
+        "pvS9RunningStateId": {
+          "type": "objectId",
+          "label": "S9 läuft (nur Diagnose)",
+          "sm": 12,
+          "md": 6
+        },
+        "pvS19RunningStateId": {
+          "type": "objectId",
+          "label": "S19 läuft (nur Diagnose)",
+          "sm": 12,
+          "md": 6
+        },
+        "pvS9ActualPowerId": {
+          "type": "objectId",
+          "label": "S9 Istleistung (W)",
+          "sm": 12,
+          "md": 6
+        },
+        "pvS19ActualPowerId": {
+          "type": "objectId",
+          "label": "S19 Istleistung (W)",
+          "sm": 12,
+          "md": 6
+        },
         "pvInterval": {
           "type": "number",
           "label": "Regelintervall (Sekunden)",
