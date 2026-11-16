@@ -1167,7 +1167,8 @@ describe('PV restart unlock candidate remains read-only', () => {
         activeSafeStops: new Set<string>(),
         adapterShuttingDown: false,
         relayPoweredOnAt,
-        prePowerOnApproved: true,
+        adapterSessionId: 'session-current',
+        prePowerOnEvidence: { minerId, adapterSessionId: 'session-current', approvedAt: relayPoweredOnAt - 1000, expiresAt: now + 5000 },
         restart: {
             enabled: true,
             relayConfirmedOff: false,
@@ -1203,7 +1204,7 @@ describe('PV restart unlock candidate remains read-only', () => {
 
     it('rejects missing pre-power-on approval without changing locks', () => {
         const values = candidate('s9');
-        expect(isPvRestartUnlockCandidate({ ...values, prePowerOnApproved: false })).to.equal(false);
+        expect(isPvRestartUnlockCandidate({ ...values, prePowerOnEvidence: undefined })).to.equal(false);
         expect(lockedMiners.has('s9')).to.equal(true);
     });
 
@@ -1259,7 +1260,8 @@ describe('PV unlock transaction simulation (test-only, no adapter wiring)', () =
         activeSafeStops: new Set<string>(),
         adapterShuttingDown: false,
         relayPoweredOnAt: poweredOnAt,
-        prePowerOnApproved: true,
+        adapterSessionId: 'session-current',
+        prePowerOnEvidence: { minerId, adapterSessionId: 'session-current', approvedAt: poweredOnAt - 1000, expiresAt: now + 5000 }
         restart: {
             enabled: true,
             relayConfirmedOff: false,
