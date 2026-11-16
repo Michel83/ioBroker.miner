@@ -12,9 +12,18 @@ describe('MinerManager command coordination', () => {
         const events: string[] = [];
         const miner = {
             settings: { id: 'test' },
-            start: async () => { events.push('start'); },
-            stop: async () => { events.push('stop'); },
-            close: async () => { events.push('close'); },
+            start: () => {
+                events.push('start');
+                return Promise.resolve();
+            },
+            stop: () => {
+                events.push('stop');
+                return Promise.resolve();
+            },
+            close: () => {
+                events.push('close');
+                return Promise.resolve();
+            },
         } as unknown as Miner<MinerSettings>;
         (manager as unknown as { miners: Miner<MinerSettings>[] }).miners.push(miner);
         return { manager, events };
