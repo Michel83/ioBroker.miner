@@ -486,7 +486,20 @@ describe('PV restart release remains diagnostic only', () => {
 
     it('rejects export that cannot cover battery discharge and reserve', () => {
         expect(isPvRestartAllowed({ ...base(), batteryPower: 600 })).to.equal(false);
-        expect(isPvRestartAllowed({ ...base(), batteryPower: 500 })).to.equal(true);
+        expect(isPvRestartAllowed({ ...base(), batteryPower: 500 })).to.equal(false);
+    });
+
+    it('blocks even tiny battery discharge despite abundant PV export', () => {
+        for (const batteryPower of [0.01, 1, 100, 500]) {
+            expect(isPvRestartAllowed({
+                ...base(), gridPower: -10_000, batteryPower,
+            }), `battery discharge ${batteryPower} W`).to.equal(false);
+        }
+    });
+
+    it('still accepts zero battery discharge and charging with sufficient export', () => {
+        expect(isPvRestartAllowed({ ...base(), batteryPower: 0 })).to.equal(true);
+        expect(isPvRestartAllowed({ ...base(), batteryPower: -500 })).to.equal(true);
     });
 
     it('rejects future, missing and invalid restart evidence', () => {
