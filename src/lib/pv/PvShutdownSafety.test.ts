@@ -1261,7 +1261,7 @@ describe('PV unlock transaction simulation (test-only, no adapter wiring)', () =
         adapterShuttingDown: false,
         relayPoweredOnAt: poweredOnAt,
         adapterSessionId: 'session-current',
-        prePowerOnEvidence: { minerId, adapterSessionId: 'session-current', approvedAt: poweredOnAt - 1000, expiresAt: now + 5000 }
+        prePowerOnEvidence: { minerId, adapterSessionId: 'session-current', approvedAt: poweredOnAt - 1000, expiresAt: now + 5000 },
         restart: {
             enabled: true,
             relayConfirmedOff: false,
