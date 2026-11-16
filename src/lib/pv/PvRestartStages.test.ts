@@ -76,4 +76,35 @@ describe('PV restart distinct relay OFF and ON stages (diagnostic only)', () => 
         exportLost.restart.gridPower = -100;
         expect(isPvPostPowerOnApproved(exportLost)).to.equal(false);
     });
+
+    it('blocks restart when grid telemetry stops updating', () => {
+        const disconnected = values();
+        disconnected.restart.gridTimestamp = now - 15_001;
+        expect(isPvPostPowerOnApproved(disconnected)).to.equal(false);
+    });
+
+    it('blocks restart when battery telemetry stops updating', () => {
+        const disconnected = values();
+        disconnected.restart.batteryTimestamp = now - 15_001;
+        expect(isPvPostPowerOnApproved(disconnected)).to.equal(false);
+    });
+
+    it('blocks restart when Sonoff ON acknowledgement is missing', () => {
+        const disconnected = values();
+        disconnected.readiness.relayAck = false;
+        expect(isPvPostPowerOnApproved(disconnected)).to.equal(false);
+    });
+
+    it('blocks restart when Sonoff ON feedback stops updating', () => {
+        const disconnected = values();
+        disconnected.readiness.relayTimestamp = now - 15_001;
+        expect(isPvPostPowerOnApproved(disconnected)).to.equal(false);
+    });
+
+    it('blocks restart when miner communication becomes stale', () => {
+        const disconnected = values();
+        disconnected.readiness.minerSeenAt = now - 15_001;
+        expect(isPvPostPowerOnApproved(disconnected)).to.equal(false);
+    });
+
 });
