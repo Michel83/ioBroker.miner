@@ -678,3 +678,52 @@ describe('PV stop restoration diagnostics', () => {
         expect(isPvStopRestorationConsistent({ ...valid(), power: 100 })).to.equal(false);
     });
 });
+
+describe('PV final relay-off safety regression', () => {
+    const pausedAt = 1_800_000_000_000;
+    const start = pausedAt + 1000;
+    const maxAgeMs = 15_000;
+    const reading = (timestamp: number): PvShutdownMeasurements => ({
+        hashrate: 0,
+        hashrateTimestamp: timestamp,
+        power: 75,
+        powerTimestamp: timestamp,
+        lastSeen: timestamp,
+    });
+
+    it('rejects resumed hashing immediately before relay-off', () => {
+        const finalReading = { ...reading(start + 30_000), hashrate: 1 };
+        expect(isPvShutdownSafe(finalReading, start + 30_000, maxAgeMs, pausedAt)).to.equal(false);
+    });
+
+    it('rejects missing or stale power immediately before relay-off', () => {
+        const now = start + 30_000;
+        expect(isPvShutdownSafe({ ...reading(now), power: undefined }, now, maxAgeMs, pausedAt)).to.equal(false);
+        expect(isPvShutdownSafe({ ...reading(now), powerTimestamp: now - maxAgeMs - 1 }, now, maxAgeMs, pausedAt)).to.equal(false);
+    });
+
+    it('resets 30-second confirmation after a missing hashrate sample', () => {
+        const confirmation = new PvShutdownConfirmation();
+        expect(confirmation.update(reading(start), start, maxAgeMs, pausedAt)).to.equal(false);
+        for (let seconds = 5; seconds <= 15; seconds += 5) {
+            const time = start + seconds * 1000;
+            expect(confirmation.update(reading(time), time, maxAgeMs, pausedAt)).to.equal(false);
+        }
+        const interruptedAt = start + 20_000;
+        expect(confirmation.update({ ...reading(interruptedAt), hashrate: undefined }, interruptedAt, maxAgeMs, pausedAt)).to.equal(false);
+        for (let seconds = 25; seconds <= 45; seconds += 5) {
+            const time = start + seconds * 1000;
+            expect(confirmation.update(reading(time), time, maxAgeMs, pausedAt)).to.equal(false);
+        }
+        expect(confirmation.update(reading(start + 55_000), start + 55_000, maxAgeMs, pausedAt)).to.equal(true);
+    });
+
+    it('does not confirm when hashrate resumes during stability window', () => {
+        const confirmation = new PvShutdownConfirmation();
+        confirmation.update(reading(start), start, maxAgeMs, pausedAt);
+        const interruptedAt = start + 10_000;
+        expect(confirmation.update({ ...reading(interruptedAt), hashrate: 50 }, interruptedAt, maxAgeMs, pausedAt)).to.equal(false);
+        expect(confirmation.update(reading(start + 15_000), start + 15_000, maxAgeMs, pausedAt)).to.equal(false);
+        expect(confirmation.update(reading(start + 30_000), start + 30_000, maxAgeMs, pausedAt)).to.equal(false);
+    });
+});
