@@ -377,6 +377,21 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
                         label: { en: 'Externer Schaltaktor: Datenpunkt-ID', de: 'Externer Schaltaktor: Datenpunkt-ID' },
                         hidden: "data.category !== 'miner'",
                     },
+                    pvRelayFeedbackStateId: {
+                        type: 'objectId',
+                        customFilter: { common: { type: 'boolean' } },
+                        newLine: true,
+                        label: { en: 'Relay feedback state ID (optional)', de: 'Rückmeldung Schaltaktor: Datenpunkt-ID (optional)' },
+                        hidden: "data.category !== 'miner'",
+                    },
+                    pvRelayOffConfirmationTimeout: {
+                        type: 'number',
+                        newLine: true,
+                        label: { en: 'Relay OFF confirmation timeout (s)', de: 'Bestätigungszeit Relais AUS (s)' },
+                        hidden: "data.category !== 'miner'",
+                        min: 90,
+                        step: 1,
+                    },
                     pvRelayOnValue: {
                         type: 'checkbox',
                         newLine: true,
@@ -453,6 +468,8 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
                     pvMaxPower: existingSettings.pvControl?.maxPower ?? 0,
                     pvPowerOffset: existingSettings.pvControl?.powerOffset ?? 0,
                     pvRelayStateId: existingSettings.pvControl?.relayStateId ?? '',
+                    pvRelayFeedbackStateId: existingSettings.pvControl?.relayFeedbackStateId ?? '',
+                    pvRelayOffConfirmationTimeout: existingSettings.pvControl?.relayOffConfirmationTimeout ?? 90,
                     pvRelayOnValue: existingSettings.pvControl?.relayOnValue ?? true,
                     pvStartupDelay: existingSettings.pvControl?.startupDelay ?? 0,
                     pvRestartDelay: existingSettings.pvControl?.restartDelay ?? 180,
@@ -736,6 +753,8 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
             shutdownDelay: nonNegative(result.pvShutdownDelay, 0),
             powerStateId: typeof result.pvPowerStateId === 'string' ? result.pvPowerStateId.trim() : '',
             runningStateId: typeof result.pvRunningStateId === 'string' ? result.pvRunningStateId.trim() : '',
+            relayFeedbackStateId: typeof result.pvRelayFeedbackStateId === 'string' ? result.pvRelayFeedbackStateId.trim() : '',
+            relayOffConfirmationTimeout: Math.max(90, nonNegative(result.pvRelayOffConfirmationTimeout, 90)),
         };
 
         const settings: IOBrokerMinerSettings = {
