@@ -1233,3 +1233,84 @@ describe('PV restart unlock candidate remains read-only', () => {
         })).to.equal(false);
     });
 });
+
+describe('PV unlock transaction simulation (test-only, no adapter wiring)', () => {
+    const now = 1_800_000_000_000;
+    const poweredOnAt = now - 120_000;
+    const locks = new Set(['s9', 's19']);
+    const evidence = (minerId: string) => ({
+        minerId,
+        lockedMiners: locks,
+        activeSafeStops: new Set<string>(),
+        adapterShuttingDown: false,
+        relayPoweredOnAt: poweredOnAt,
+        restart: {
+            enabled: true,
+            relayConfirmedOff: true,
+            gridPower: -2500,
+            batteryPower: 0,
+            gridTimestamp: now,
+            batteryTimestamp: now,
+            now,
+            maxAgeMs: 15_000,
+            reserveWatts: 200,
+            minimumStartWatts: 1800,
+            lastStoppedAt: now - 300_000,
+            restartDelayMs: 180_000,
+        },
+        readiness: {
+            relayOn: true,
+            relayTimestamp: now,
+            relayEnabledAt: poweredOnAt,
+            minerReachable: true,
+            minerSeenAt: now,
+            now,
+            maxAgeMs: 15_000,
+            startupDelayMs: 120_000,
+        },
+    });
+
+    // Test-local simulation only. Production lock sets are never passed here.
+    const simulateAtomicUnlock = (values: ReturnType<typeof evidence>): boolean => {
+        if (!isPvRestartUnlockCandidate(values)) {
+            return false;
+        }
+        return locks.delete(values.minerId);
+    };
+
+    beforeEach(() => {
+        locks.clear();
+        locks.add('s9');
+        locks.add('s19');
+    });
+
+    it('unlocks only S9 in the simulated transaction, leaving S19 blocked', () => {
+        expect(simulateAtomicUnlock(evidence('s9'))).to.equal(true);
+        expect(locks.has('s9')).to.equal(false);
+        expect(locks.has('s19')).to.equal(true);
+        expect(isPvMinerCommandAllowed('s19', new Set<string>(), locks, false)).to.equal(false);
+    });
+
+    it('does not unlock when PV export disappears before the simulated commit', () => {
+        const first = evidence('s9');
+        expect(isPvRestartUnlockCandidate(first)).to.equal(true);
+        const changed = evidence('s9');
+        changed.restart.gridPower = -100;
+        expect(simulateAtomicUnlock(changed)).to.equal(false);
+        expect(locks.has('s9')).to.equal(true);
+        expect(locks.has('s19')).to.equal(true);
+    });
+
+    it('does not unlock during shutdown or a concurrent safe stop', () => {
+        expect(simulateAtomicUnlock({ ...evidence('s9'), adapterShuttingDown: true })).to.equal(false);
+        expect(simulateAtomicUnlock({ ...evidence('s19'), activeSafeStops: new Set(['s19']) })).to.equal(false);
+        expect(locks.has('s9')).to.equal(true);
+        expect(locks.has('s19')).to.equal(true);
+    });
+
+    it('does not reuse the same simulated authorization twice', () => {
+        expect(simulateAtomicUnlock(evidence('s9'))).to.equal(true);
+        expect(simulateAtomicUnlock(evidence('s9'))).to.equal(false);
+        expect(locks.has('s19')).to.equal(true);
+    });
+});
