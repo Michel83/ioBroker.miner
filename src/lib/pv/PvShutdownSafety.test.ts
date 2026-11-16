@@ -6,6 +6,7 @@ import {
     parsePvPersistedStop,
     isPvShutdownSafe,
     PvShutdownConfirmation,
+    type PvPersistedStop,
     type PvRestartMeasurements,
     type PvStartReadiness,
     type PvShutdownMeasurements,
@@ -599,7 +600,7 @@ describe('PV startup command ordering', () => {
 
 describe('PV persisted stop record validation', () => {
     const now = 1_800_000_000_000;
-    const valid = () => ({
+    const valid = (): PvPersistedStop => ({
         minerId: 's19',
         relayStateId: 'sonoff.0.relay.POWER',
         stoppedAt: now - 180_000,
