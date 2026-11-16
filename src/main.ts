@@ -19,7 +19,7 @@ import { isWithinPowerTargetConstraints, type Miner } from './lib/miner/miner/Mi
 import type { MinerSettings } from './lib/miner/model/MinerSettings';
 import type { MinerStats } from './lib/miner/model/MinerStats';
 import { asyncDynamicInterval, setTimerBackend, type AsyncIntervalReturnType } from './lib/utils/delay';
-import { PvShutdownConfirmation, isPvShutdownSafe } from './lib/pv/PvShutdownSafety';
+import { PvShutdownConfirmation, isPvShutdownSafe, parsePvPersistedStop } from './lib/pv/PvShutdownSafety';
 import { UpdateSources } from './lib/update/UpdateSources';
 import { runUpdateChecks, type UpdateCheckSummary } from './lib/update/runUpdateChecks';
 import type { UpdateCheckContext, UpdateCheckResult } from './lib/miner/model/UpdateCheckResult';
@@ -421,6 +421,47 @@ export class MinerAdapter extends utils.Adapter {
     }
 
     // Try to initialise and connect to already known devices
+    /**
+     * Restore PV shutdown history for diagnostics only. Keep miner commands blocked
+     * until a separate, fully validated startup state machine is implemented.
+     *
+     * @param settings - configured miner
+     */
+    private async restorePvStopDiagnostics(settings: IOBrokerMinerSettings): Promise<void> {
+        const minerId = settings.settings.id;
+        const relayId = settings.pvControl?.relayStateId;
+        if (!minerId || !relayId) {
+            this.log.warn(`PV restart locked for ${settings.name}: missing miner or relay ID`);
+            return;
+        }
+        const deviceId = this.getDeviceObjectId(settings);
+        const recordState = await this.getStateAsync(`pvControl.miners.${deviceId}.lastSafeStop`);
+        let raw: unknown;
+        try {
+            raw = typeof recordState?.val === 'string' ? JSON.parse(recordState.val) : undefined;
+        } catch {
+            raw = undefined;
+        }
+        const record = parsePvPersistedStop(raw, minerId, relayId, Date.now());
+        const ageMs = Math.max(10, Number(this.config.pvMaxDataAge) || 180) * 1000;
+        const [power, relay] = await Promise.all([
+            this.readFreshPvMeasurement(settings.pvControl?.powerStateId || '', ageMs),
+            this.getForeignStateAsync(relayId),
+        ]);
+        const now = Date.now();
+        const relayFresh =
+            typeof relay?.ts === 'number' &&
+            relay.ts <= now &&
+            now - relay.ts <= ageMs;
+        const relayOff = relayFresh && relay?.val === !settings.pvControl?.relayOnValue;
+        const powerOff = power !== undefined && power.value >= 0 && power.value <= 5;
+        if (record && relayOff && powerOff) {
+            this.log.info(`PV stop history for ${settings.name} matches fresh OFF/zero-power diagnostics; restart remains locked`);
+        } else {
+            this.log.warn(`PV restart locked for ${settings.name}: stored stop, relay or power diagnostics missing/inconsistent`);
+        }
+    }
+
     private async tryKnownDevices(): Promise<void> {
         const knownDevices = await this.getDevicesAsync();
 
@@ -581,6 +622,12 @@ export class MinerAdapter extends utils.Adapter {
         if (!isMiner(settings)) {
             this.log.error(`tryKnownDevices category ${settings.category} not yet supported`);
             return;
+        }
+
+        // Fail closed on every adapter restart. Persisted history cannot authorize commands.
+        if (settings.pvControl?.enabled === true && settings.settings.id) {
+            this.pvRelayOffMiners.add(settings.settings.id);
+            await this.restorePvStopDiagnostics(settings);
         }
 
         await this.createDeviceStateObjects(settings);
