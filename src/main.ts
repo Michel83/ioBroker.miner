@@ -29,6 +29,7 @@ import {
 } from './lib/pv/PvShutdownSafety';
 import { calculatePvV243 } from './lib/pv/PvRegulationV243';
 import { confirmedPvRelayOn } from './lib/pv/PvRelayFeedbackDiagnostic';
+import { pvRestartCountdownSeconds } from './lib/pv/PvRestartCountdown';
 import { evaluatePvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
 import type { PvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
 import type { PvMinerKindV243 } from './lib/pv/PvTargetRegulationV243';
@@ -1468,6 +1469,40 @@ export class MinerAdapter extends utils.Adapter {
                     }
                 }
                 await this.setState(`${base}.relayOn`, { val: relayOn, ack: true });
+                // Only display a countdown when the saved stop matches current
+                // fresh relay OFF and near-zero measured power. No unlock path.
+                let countdown: number | null = null;
+                if (pv.relayStateId && typeof pv.relayOnValue === 'boolean') {
+                    try {
+                        const recordState = await this.getStateAsync(`${base}.lastSafeStop`);
+                        let storedRecord: unknown;
+                        try {
+                            storedRecord = typeof recordState?.val === 'string' ? JSON.parse(recordState.val) : undefined;
+                        } catch {
+                            storedRecord = undefined;
+                        }
+                        const [relay, power] = await Promise.all([
+                            this.getForeignStateAsync(feedbackId || ''),
+                            this.readFreshPvMeasurement(pv.powerStateId || '', ageMs),
+                        ]);
+                        const now = Date.now();
+                        countdown = pvRestartCountdownSeconds({
+                            storedRecord,
+                            minerId: settings.settings.id,
+                            relayStateId: pv.relayStateId,
+                            relayOnValue: pv.relayOnValue,
+                            relayValue: relay?.ack === true ? relay.val : undefined,
+                            relayTimestamp: relay?.ts,
+                            power: power?.value,
+                            powerTimestamp: power?.timestamp,
+                            now,
+                            maxAgeMs: ageMs,
+                        }, pv.restartDelay);
+                    } catch {
+                        // Incomplete diagnostics must never invent a countdown.
+                    }
+                }
+                await this.setState(`${base}.restartCountdown`, { val: countdown, ack: true });
             }
             const grid = await this.readFreshPvValue(this.config.pvGridPowerId || '', ageMs);
             const battery = await this.readFreshPvValue(this.config.pvBatteryPowerId || '', ageMs);
