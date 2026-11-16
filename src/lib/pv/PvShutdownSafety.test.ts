@@ -1,5 +1,6 @@
 import { expect } from 'chai';
 import {
+    executePvStartup,
     isPvRestartAllowed,
     isPvStartReady,
     isPvShutdownSafe,
@@ -482,5 +483,82 @@ describe('PV miner startup readiness', () => {
     it('requires miner contact after relay was enabled', () => {
         expect(isPvStartReady({ ...valid(), minerSeenAt: now - 120_001 })).to.equal(false);
         expect(isPvStartReady({ ...valid(), relayEnabledAt: undefined })).to.equal(false);
+    });
+});
+
+describe('PV startup command ordering', () => {
+    const now = 1_800_000_000_000;
+    const ready = (): PvStartReadiness => ({
+        relayOn: true,
+        relayTimestamp: now,
+        relayEnabledAt: now - 120_000,
+        minerReachable: true,
+        minerSeenAt: now,
+        now,
+        maxAgeMs: 15_000,
+        startupDelayMs: 120_000,
+    });
+
+    it('powers on before checking readiness and starting mining', async () => {
+        const calls: string[] = [];
+        await executePvStartup({
+            mayPowerOn: () => { calls.push('pv-before-relay'); return Promise.resolve(true); },
+            powerOnRelay: () => { calls.push('relay-on'); return Promise.resolve(); },
+            awaitReadiness: () => { calls.push('readiness'); return Promise.resolve(ready()); },
+            mayStartMining: () => { calls.push('pv-before-start'); return Promise.resolve(true); },
+            startMining: () => { calls.push('miner-start'); return Promise.resolve(); },
+        });
+        expect(calls).to.deep.equal(['pv-before-relay', 'relay-on', 'readiness', 'pv-before-start', 'miner-start']);
+    });
+
+    it('does not power on without PV eligibility', async () => {
+        const calls: string[] = [];
+        try {
+            await executePvStartup({
+                mayPowerOn: () => Promise.resolve(false),
+                powerOnRelay: () => { calls.push('relay-on'); return Promise.resolve(); },
+                awaitReadiness: () => Promise.resolve(ready()),
+                mayStartMining: () => Promise.resolve(true),
+                startMining: () => { calls.push('miner-start'); return Promise.resolve(); },
+            });
+            expect.fail('startup must be blocked');
+        } catch (error) {
+            expect(String(error)).to.contain('PV startup blocked');
+        }
+        expect(calls).to.deep.equal([]);
+    });
+
+    it('never starts mining or powers off if readiness fails', async () => {
+        const calls: string[] = [];
+        try {
+            await executePvStartup({
+                mayPowerOn: () => Promise.resolve(true),
+                powerOnRelay: () => { calls.push('relay-on'); return Promise.resolve(); },
+                awaitReadiness: () => Promise.resolve({ ...ready(), minerReachable: false }),
+                mayStartMining: () => Promise.resolve(true),
+                startMining: () => { calls.push('miner-start'); return Promise.resolve(); },
+            });
+            expect.fail('startup must be blocked');
+        } catch (error) {
+            expect(String(error)).to.contain('not confirmed ready');
+        }
+        expect(calls).to.deep.equal(['relay-on']);
+    });
+
+    it('does not start if PV eligibility disappears during boot', async () => {
+        const calls: string[] = [];
+        try {
+            await executePvStartup({
+                mayPowerOn: () => Promise.resolve(true),
+                powerOnRelay: () => { calls.push('relay-on'); return Promise.resolve(); },
+                awaitReadiness: () => Promise.resolve(ready()),
+                mayStartMining: () => Promise.resolve(false),
+                startMining: () => { calls.push('miner-start'); return Promise.resolve(); },
+            });
+            expect.fail('startup must be blocked');
+        } catch (error) {
+            expect(String(error)).to.contain('conditions changed');
+        }
+        expect(calls).to.deep.equal(['relay-on']);
     });
 });
