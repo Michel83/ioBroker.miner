@@ -39,6 +39,13 @@ export class PvTargetDiagnosticV243 {
 
         // No restart timestamp is available. A target change is only a conservative
         // observed proxy; do not present this diagnostic as actual restart protection.
+        // The initial observation window must not count toward increase stabilization.
+        // Do not create or advance a candidate until this window has elapsed.
+        if (miner === 'S19' && history.lastChangeAt === undefined && now - history.observedAt < 180_000) {
+            history.candidateWatts = undefined;
+            history.candidateSince = undefined;
+            return { action: 'hold', reason: 's19-initial-observation' };
+        }
         const decision = decidePvTargetV243({
             ...input,
             lastRegulationAt: history.lastChangeAt,
@@ -52,11 +59,6 @@ export class PvTargetDiagnosticV243 {
         } else {
             history.candidateWatts = undefined;
             history.candidateSince = undefined;
-        }
-        // On first observation we cannot know if the miner was just restarted.
-        // Hold S19 target suggestions until 180 seconds of uninterrupted observation.
-        if (miner === 'S19' && history.lastChangeAt === undefined && now - history.observedAt < 180_000) {
-            return { action: 'hold', reason: 's19-initial-observation' };
         }
         return decision;
     }
