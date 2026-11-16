@@ -6,6 +6,7 @@ describe('PV restart interruption simulation (no hardware)', () => {
     const now = 1_800_000_000_000;
     const ready = (): PvStartReadiness => ({
         relayOn: true,
+        relayAck: true,
         relayTimestamp: now,
         relayEnabledAt: now - 120_000,
         minerReachable: true,
