@@ -32,7 +32,9 @@ describe('MinerManager command coordination', () => {
     it('rejects a queued start after the safety guard becomes active', async () => {
         const { manager, events } = setup();
         let release!: () => void;
-        const waiting = new Promise<void>(resolve => { release = resolve; });
+        const waiting = new Promise<void>(resolve => {
+            release = resolve;
+        });
         const held = manager.withExclusiveMiner('test', async () => {
             await waiting;
         });
@@ -52,7 +54,9 @@ describe('MinerManager command coordination', () => {
     it('waits for an exclusive operation before closing the miner', async () => {
         const { manager, events } = setup();
         let release!: () => void;
-        const waiting = new Promise<void>(resolve => { release = resolve; });
+        const waiting = new Promise<void>(resolve => {
+            release = resolve;
+        });
         const held = manager.withExclusiveMiner('test', async () => {
             events.push('exclusive');
             await waiting;
