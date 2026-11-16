@@ -1456,6 +1456,8 @@ export class MinerAdapter extends utils.Adapter {
         if (settings.settings.minerType !== 'bosMiner') {
             throw new Error(`PV safe stop only implemented for BOSMiner: ${settings.name}`);
         }
+        const feedbackId = pv.relayFeedbackStateId || pv.relayStateId;
+        const confirmationTimeoutMs = Math.max(90, Number(pv.relayOffConfirmationTimeout) || 90) * 1000;
         this.pvSafeStops.add(id);
         const deviceId = this.getDeviceObjectId(settings);
         const ageMs = Math.max(10, Number(this.config.pvMaxDataAge) || 180) * 1000;
@@ -1477,7 +1479,7 @@ export class MinerAdapter extends utils.Adapter {
                         this.readFreshPvMeasurement(pv.powerStateId, ageMs),
                         this.getStateAsync(`${deviceId}.stats.totalHashrate`),
                         this.getStateAsync(`${deviceId}.info.lastSeen`),
-                        this.getForeignStateAsync(pv.relayStateId),
+                        this.getForeignStateAsync(feedbackId),
                     ]);
                     const now = Date.now();
                     const relayIsOn =
@@ -1515,7 +1517,7 @@ export class MinerAdapter extends utils.Adapter {
                             this.readFreshPvMeasurement(pv.powerStateId, 15_000),
                             this.getStateAsync(`${deviceId}.stats.totalHashrate`),
                             this.getStateAsync(`${deviceId}.info.lastSeen`),
-                            this.getForeignStateAsync(pv.relayStateId),
+                            this.getForeignStateAsync(feedbackId),
                         ]);
 
                         const finalNow = Date.now();
@@ -1552,12 +1554,12 @@ export class MinerAdapter extends utils.Adapter {
                         await this.setForeignStateAsync(pv.relayStateId, !pv.relayOnValue);
                         let lastPowerTimestamp = relayOffRequestedAt;
                         let zeroPowerSamples = 0;
-                        const confirmationDeadline = Date.now() + 90_000;
+                        const confirmationDeadline = Date.now() + confirmationTimeoutMs;
                         while (Date.now() < confirmationDeadline && !this.pvShuttingDown) {
                             await this.delay(5_000);
                             const [sample, relayFeedback] = await Promise.all([
                                 this.readFreshPvMeasurement(pv.powerStateId, ageMs),
-                                this.getForeignStateAsync(pv.relayStateId),
+                                this.getForeignStateAsync(feedbackId),
                             ]);
                             const feedbackNow = Date.now();
                             if (
@@ -1580,7 +1582,7 @@ export class MinerAdapter extends utils.Adapter {
                             lastPowerTimestamp = sample.timestamp;
                             zeroPowerSamples = sample.value >= 0 && sample.value <= 5 ? zeroPowerSamples + 1 : 0;
                             if (zeroPowerSamples >= 3) {
-                                const finalFeedback = await this.getForeignStateAsync(pv.relayStateId);
+                                const finalFeedback = await this.getForeignStateAsync(feedbackId);
                                 if (
                                     !isPvRelayOffConfirmed(
                                         finalFeedback?.val,
