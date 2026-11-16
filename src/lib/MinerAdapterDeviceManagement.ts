@@ -398,7 +398,10 @@ class MinerAdapterDeviceManagement extends DeviceManagement<MinerAdapter> {
                     pvPowerSampleMaxGap: {
                         type: 'number',
                         newLine: true,
-                        label: { en: 'Maximum power measurement gap (s)', de: 'Maximaler Abstand Leistungsmessung (s)' },
+                        label: {
+                            en: 'Maximum power measurement gap (s)',
+                            de: 'Maximaler Abstand Leistungsmessung (s)',
+                        },
                         hidden: "data.category !== 'miner'",
                         min: 15,
                         max: 180,
