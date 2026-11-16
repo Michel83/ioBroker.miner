@@ -144,6 +144,51 @@ describe('initial device update check', () => {
     }
 });
 
+describe('PV adapter initialization restart interlock', () => {
+    for (const minerId of ['s9', 's19']) {
+        it(`locks ${minerId} before diagnostics and miner initialization, even if diagnostics fail`, async () => {
+            const adapter = createTestAdapter();
+            const events: string[] = [];
+            const internal = adapter as unknown as {
+                pvRelayOffMiners: Set<string>;
+                restorePvStopDiagnostics: () => Promise<void>;
+            };
+            internal.restorePvStopDiagnostics = () => {
+                events.push('diagnostics');
+                expect(internal.pvRelayOffMiners.has(minerId)).to.equal(true);
+                return Promise.reject(new Error('simulated missing PV diagnostics'));
+            };
+            adapter.minerManager = {
+                init: () => {
+                    events.push('init');
+                    expect(internal.pvRelayOffMiners.has(minerId)).to.equal(true);
+                    return Promise.reject(new Error('simulated offline miner'));
+                },
+                getMiners: () => [],
+            };
+            adapter.createDeviceStateObjects = () => Promise.resolve();
+            adapter.writeStaticInfoStates = () => Promise.resolve();
+            adapter.getStateAsync = () => Promise.resolve({ val: true });
+            adapter.setState = () => Promise.resolve();
+            adapter.config.checkForUpdates = false;
+
+            await adapter.initDevice({
+                _id: `miner.0.miner.${minerId}`,
+                native: {
+                    category: 'miner',
+                    name: minerId,
+                    enabled: true,
+                    pvControl: { enabled: true },
+                    settings: { id: minerId, minerType: 'bos', host: 'localhost' },
+                },
+            } as unknown as ioBroker.DeviceObject);
+
+            expect(events).to.deep.equal(['diagnostics', 'init']);
+            expect(internal.pvRelayOffMiners.has(minerId)).to.equal(true);
+        });
+    }
+});
+
 describe('offline BOS update check after restart', () => {
     for (const enabled of [true, false]) {
         it(`uses persisted identity for an offline device (enabled=${enabled})`, async () => {
