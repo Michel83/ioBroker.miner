@@ -31,7 +31,8 @@ describe('PV restart unlock and miner command queue (simulation only)', () => {
             activeSafeStops: new Set<string>(),
             adapterShuttingDown: false,
             relayPoweredOnAt: poweredOnAt,
-            prePowerOnApproved: true,
+            adapterSessionId: 'session-current',
+            prePowerOnEvidence: { minerId: id, adapterSessionId: 'session-current', approvedAt: poweredOnAt - 1000, expiresAt: now + 5000 },
             restart: {
                 enabled: true,
                 relayConfirmedOff: false,
