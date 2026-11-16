@@ -170,6 +170,8 @@ describe('PV adapter initialization restart interlock', () => {
             adapter.writeStaticInfoStates = () => Promise.resolve();
             adapter.getStateAsync = () => Promise.resolve({ val: true });
             adapter.setState = () => Promise.resolve();
+            (adapter as unknown as { setStateChangedAsync: () => Promise<void> }).setStateChangedAsync = () =>
+                Promise.resolve();
             adapter.config.checkForUpdates = false;
 
             await adapter.initDevice({
