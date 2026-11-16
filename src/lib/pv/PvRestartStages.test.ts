@@ -29,6 +29,7 @@ describe('PV restart distinct relay OFF and ON stages (diagnostic only)', () => 
         },
         readiness: {
             relayOn: true,
+            relayAck: true,
             relayTimestamp: now,
             relayEnabledAt: poweredOnAt,
             minerReachable: true,
