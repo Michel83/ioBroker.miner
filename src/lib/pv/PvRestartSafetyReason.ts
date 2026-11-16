@@ -13,6 +13,8 @@ export function pvRestartSafetyReason(values: {
     if (values.relayOn === null) return 'relay_feedback_missing_or_stale';
     if (values.relayOn) return 'relay_still_on';
     if (values.gridPower === undefined || values.batteryPower === undefined) return 'pv_measurements_missing_or_stale';
+    if (!Number.isFinite(values.minimumStartWatts) || values.minimumStartWatts <= 0 ||
+        !Number.isFinite(values.reserveWatts) || values.reserveWatts < 0) return 'pv_configuration_invalid';
     if (values.batteryPower > 0) return 'battery_discharging';
     if (-values.gridPower - values.reserveWatts - Math.max(0, values.batteryPower) < values.minimumStartWatts) {
         return 'pv_surplus_insufficient';
