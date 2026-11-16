@@ -764,7 +764,6 @@ describe('PV relay OFF acknowledgement', () => {
     });
 });
 
-
 describe('PV shutdown with slow independent power telemetry', () => {
     const base = 1_800_000_000_000;
     const pausedAt = base - 1_000;
