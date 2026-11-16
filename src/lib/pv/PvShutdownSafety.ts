@@ -135,3 +135,55 @@ export class PvShutdownConfirmation {
         return false;
     }
 }
+
+/** Inputs for a fail-closed automatic PV restart decision. No hardware commands. */
+export interface PvRestartMeasurements {
+    enabled: boolean;
+    relayConfirmedOff: boolean;
+    gridPower: number | undefined;
+    batteryPower: number | undefined;
+    gridTimestamp: number | undefined;
+    batteryTimestamp: number | undefined;
+    now: number;
+    maxAgeMs: number;
+    reserveWatts: number;
+    minimumStartWatts: number;
+    lastStoppedAt: number | undefined;
+    restartDelayMs: number;
+}
+
+/** Allow a new relay-on request only with fresh measurements and sufficient export. */
+export function isPvRestartAllowed(values: PvRestartMeasurements): boolean {
+    const fresh = (timestamp: number | undefined): boolean =>
+        timestamp !== undefined &&
+        Number.isFinite(timestamp) &&
+        timestamp <= values.now &&
+        values.now - timestamp <= values.maxAgeMs;
+
+    if (
+        !values.enabled ||
+        !values.relayConfirmedOff ||
+        !fresh(values.gridTimestamp) ||
+        !fresh(values.batteryTimestamp) ||
+        values.gridPower === undefined ||
+        values.batteryPower === undefined ||
+        !Number.isFinite(values.gridPower) ||
+        !Number.isFinite(values.batteryPower) ||
+        !Number.isFinite(values.reserveWatts) ||
+        !Number.isFinite(values.minimumStartWatts) ||
+        values.reserveWatts < 0 ||
+        values.minimumStartWatts <= 0 ||
+        !Number.isFinite(values.restartDelayMs) ||
+        values.restartDelayMs < 0 ||
+        values.lastStoppedAt === undefined ||
+        !Number.isFinite(values.lastStoppedAt) ||
+        values.lastStoppedAt > values.now ||
+        values.now - values.lastStoppedAt < values.restartDelayMs
+    ) {
+        return false;
+    }
+
+    // Negative grid means export; positive battery means discharge.
+    const availableWatts = -values.gridPower - values.reserveWatts - Math.max(0, values.batteryPower);
+    return availableWatts >= values.minimumStartWatts;
+}
