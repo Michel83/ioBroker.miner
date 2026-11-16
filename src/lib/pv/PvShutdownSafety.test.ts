@@ -8,6 +8,7 @@ import {
     isPvShutdownSafe,
     isPvRelayOffConfirmed,
     PvShutdownConfirmation,
+    PvRelayOffPowerConfirmation,
     type PvPersistedStop,
     type PvStopRestoration,
     type PvRestartMeasurements,
@@ -847,5 +848,60 @@ describe('PV shutdown with slow independent power telemetry', () => {
             lastSeen: base,
         };
         expect(confirmation.update(beforePause, base, maxAgeMs, pausedAt, 30_000, 10_000, 150_000)).to.equal(false);
+    });
+});
+
+describe('PV relay OFF: three independent post-command power readings', () => {
+    const requestedAt = 1_800_000_000_000;
+    const maxAgeMs = 180_000;
+
+    for (const intervalSeconds of [10, 30, 150]) {
+        it(`confirms only after three distinct zero-power readings (${intervalSeconds}s interval)`, () => {
+            const check = new PvRelayOffPowerConfirmation(requestedAt);
+            for (let i = 1; i <= 3; i++) {
+                const timestamp = requestedAt + i * intervalSeconds * 1000;
+                expect(check.update(0, timestamp, true, timestamp, maxAgeMs)).to.equal(i === 3);
+            }
+        });
+    }
+
+    it('does not count repeated or pre-command timestamps', () => {
+        const check = new PvRelayOffPowerConfirmation(requestedAt);
+        expect(check.update(0, requestedAt, true, requestedAt + 5000, maxAgeMs)).to.equal(false);
+        expect(check.update(0, requestedAt + 5000, true, requestedAt + 5000, maxAgeMs)).to.equal(false);
+        expect(check.update(0, requestedAt + 5000, true, requestedAt + 10_000, maxAgeMs)).to.equal(false);
+        expect(check.update(0, requestedAt + 10_000, true, requestedAt + 10_000, maxAgeMs)).to.equal(false);
+        expect(check.update(0, requestedAt + 15_000, true, requestedAt + 15_000, maxAgeMs)).to.equal(true);
+    });
+
+    it('requires relay OFF confirmation and resets the count when feedback disappears', () => {
+        const check = new PvRelayOffPowerConfirmation(requestedAt);
+        expect(check.update(0, requestedAt + 1000, true, requestedAt + 1000, maxAgeMs)).to.equal(false);
+        expect(check.update(0, requestedAt + 2000, false, requestedAt + 2000, maxAgeMs)).to.equal(false);
+        expect(check.update(0, requestedAt + 3000, true, requestedAt + 3000, maxAgeMs)).to.equal(false);
+        expect(check.update(0, requestedAt + 4000, true, requestedAt + 4000, maxAgeMs)).to.equal(false);
+        expect(check.update(0, requestedAt + 5000, true, requestedAt + 5000, maxAgeMs)).to.equal(true);
+    });
+
+    it('rejects stale, future, missing, negative and invalid measurements', () => {
+        const check = new PvRelayOffPowerConfirmation(requestedAt);
+        expect(check.update(undefined, undefined, true, requestedAt + 1000, maxAgeMs)).to.equal(false);
+        expect(check.update(0, requestedAt + 1000, true, requestedAt + maxAgeMs + 1002, maxAgeMs)).to.equal(false);
+        expect(check.update(0, requestedAt + 10_000, true, requestedAt + 9000, maxAgeMs)).to.equal(false);
+        expect(check.update(Number.NaN, requestedAt + 10_000, true, requestedAt + 10_000, maxAgeMs)).to.equal(false);
+        expect(check.update(-1, requestedAt + 10_000, true, requestedAt + 10_000, maxAgeMs)).to.equal(false);
+        expect(check.update(6, requestedAt + 20_000, true, requestedAt + 20_000, maxAgeMs)).to.equal(false);
+        expect(check.update(5, requestedAt + 30_000, true, requestedAt + 30_000, maxAgeMs)).to.equal(false);
+        expect(check.update(0, requestedAt + 40_000, true, requestedAt + 40_000, maxAgeMs)).to.equal(false);
+        expect(check.update(0, requestedAt + 50_000, true, requestedAt + 50_000, maxAgeMs)).to.equal(true);
+    });
+
+    it('does not accept an unacknowledged or stale relay OFF state', () => {
+        const check = new PvRelayOffPowerConfirmation(requestedAt);
+        for (let i = 1; i <= 3; i++) {
+            const timestamp = requestedAt + i * 10_000;
+            const relayOff = isPvRelayOffConfirmed(false, timestamp, false, true, requestedAt, timestamp, maxAgeMs);
+            expect(check.update(0, timestamp, relayOff, timestamp, maxAgeMs)).to.equal(false);
+        }
     });
 });
