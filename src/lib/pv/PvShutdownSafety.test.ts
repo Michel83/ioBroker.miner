@@ -2,6 +2,7 @@ import { expect } from 'chai';
 import {
     executePvStartup,
     isPvRestartAllowed,
+    isPvPrePowerOnEvidenceCurrent,
     isPvRestartUnlockCandidate,
     isPvStartReady,
     isPvStopRestorationConsistent,
@@ -1327,5 +1328,36 @@ describe('PV unlock transaction simulation (test-only, no adapter wiring)', () =
         expect(simulateAtomicUnlock(evidence('s9'))).to.equal(true);
         expect(simulateAtomicUnlock(evidence('s9'))).to.equal(false);
         expect(locks.has('s19')).to.equal(true);
+    });
+});
+
+describe('PV pre-power-on evidence binding (diagnostic only)', () => {
+    const now = 1_800_000_000_000;
+    const poweredOnAt = now - 10_000;
+    const evidence = {
+        minerId: 's9',
+        adapterSessionId: 'session-current',
+        approvedAt: poweredOnAt - 1000,
+        expiresAt: now + 5000,
+    };
+
+    it('accepts evidence for the same miner and current adapter session', () => {
+        expect(isPvPrePowerOnEvidenceCurrent(evidence, 's9', 'session-current', poweredOnAt, now)).to.equal(true);
+    });
+
+    it('rejects another miner and a previous adapter session', () => {
+        expect(isPvPrePowerOnEvidenceCurrent(evidence, 's19', 'session-current', poweredOnAt, now)).to.equal(false);
+        expect(isPvPrePowerOnEvidenceCurrent(evidence, 's9', 'session-previous', poweredOnAt, now)).to.equal(false);
+    });
+
+    it('rejects expired evidence or approval after relay power-on', () => {
+        expect(isPvPrePowerOnEvidenceCurrent({ ...evidence, expiresAt: now - 1 }, 's9', 'session-current', poweredOnAt, now)).to.equal(false);
+        expect(isPvPrePowerOnEvidenceCurrent({ ...evidence, approvedAt: poweredOnAt + 1 }, 's9', 'session-current', poweredOnAt, now)).to.equal(false);
+    });
+
+    it('rejects absent evidence and invalid timestamps', () => {
+        expect(isPvPrePowerOnEvidenceCurrent(undefined, 's9', 'session-current', poweredOnAt, now)).to.equal(false);
+        expect(isPvPrePowerOnEvidenceCurrent(evidence, 's9', 'session-current', undefined, now)).to.equal(false);
+        expect(isPvPrePowerOnEvidenceCurrent({ ...evidence, approvedAt: Number.NaN }, 's9', 'session-current', poweredOnAt, now)).to.equal(false);
     });
 });
