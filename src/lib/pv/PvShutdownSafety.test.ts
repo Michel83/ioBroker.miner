@@ -502,11 +502,26 @@ describe('PV startup command ordering', () => {
     it('powers on before checking readiness and starting mining', async () => {
         const calls: string[] = [];
         await executePvStartup({
-            mayPowerOn: () => { calls.push('pv-before-relay'); return Promise.resolve(true); },
-            powerOnRelay: () => { calls.push('relay-on'); return Promise.resolve(); },
-            awaitReadiness: () => { calls.push('readiness'); return Promise.resolve(ready()); },
-            mayStartMining: () => { calls.push('pv-before-start'); return Promise.resolve(true); },
-            startMining: () => { calls.push('miner-start'); return Promise.resolve(); },
+            mayPowerOn: () => {
+                calls.push('pv-before-relay');
+                return Promise.resolve(true);
+            },
+            powerOnRelay: () => {
+                calls.push('relay-on');
+                return Promise.resolve();
+            },
+            awaitReadiness: () => {
+                calls.push('readiness');
+                return Promise.resolve(ready());
+            },
+            mayStartMining: () => {
+                calls.push('pv-before-start');
+                return Promise.resolve(true);
+            },
+            startMining: () => {
+                calls.push('miner-start');
+                return Promise.resolve();
+            },
         });
         expect(calls).to.deep.equal(['pv-before-relay', 'relay-on', 'readiness', 'pv-before-start', 'miner-start']);
     });
@@ -516,10 +531,16 @@ describe('PV startup command ordering', () => {
         try {
             await executePvStartup({
                 mayPowerOn: () => Promise.resolve(false),
-                powerOnRelay: () => { calls.push('relay-on'); return Promise.resolve(); },
+                powerOnRelay: () => {
+                    calls.push('relay-on');
+                    return Promise.resolve();
+                },
                 awaitReadiness: () => Promise.resolve(ready()),
                 mayStartMining: () => Promise.resolve(true),
-                startMining: () => { calls.push('miner-start'); return Promise.resolve(); },
+                startMining: () => {
+                    calls.push('miner-start');
+                    return Promise.resolve();
+                },
             });
             expect.fail('startup must be blocked');
         } catch (error) {
@@ -533,10 +554,16 @@ describe('PV startup command ordering', () => {
         try {
             await executePvStartup({
                 mayPowerOn: () => Promise.resolve(true),
-                powerOnRelay: () => { calls.push('relay-on'); return Promise.resolve(); },
+                powerOnRelay: () => {
+                    calls.push('relay-on');
+                    return Promise.resolve();
+                },
                 awaitReadiness: () => Promise.resolve({ ...ready(), minerReachable: false }),
                 mayStartMining: () => Promise.resolve(true),
-                startMining: () => { calls.push('miner-start'); return Promise.resolve(); },
+                startMining: () => {
+                    calls.push('miner-start');
+                    return Promise.resolve();
+                },
             });
             expect.fail('startup must be blocked');
         } catch (error) {
@@ -550,10 +577,16 @@ describe('PV startup command ordering', () => {
         try {
             await executePvStartup({
                 mayPowerOn: () => Promise.resolve(true),
-                powerOnRelay: () => { calls.push('relay-on'); return Promise.resolve(); },
+                powerOnRelay: () => {
+                    calls.push('relay-on');
+                    return Promise.resolve();
+                },
                 awaitReadiness: () => Promise.resolve(ready()),
                 mayStartMining: () => Promise.resolve(false),
-                startMining: () => { calls.push('miner-start'); return Promise.resolve(); },
+                startMining: () => {
+                    calls.push('miner-start');
+                    return Promise.resolve();
+                },
             });
             expect.fail('startup must be blocked');
         } catch (error) {
