@@ -430,7 +430,7 @@ export class MinerAdapter extends utils.Adapter {
     private async restorePvStopDiagnostics(settings: IOBrokerMinerSettings): Promise<void> {
         const minerId = settings.settings.id;
         const relayId = settings.pvControl?.relayStateId;
-        if (!minerId || !relayId) {
+        if (!minerId || !relayId || typeof settings.pvControl?.relayOnValue !== 'boolean') {
             this.log.warn(`PV restart locked for ${settings.name}: missing miner or relay ID`);
             return;
         }
@@ -451,7 +451,7 @@ export class MinerAdapter extends utils.Adapter {
             storedRecord: raw,
             minerId,
             relayStateId: relayId,
-            relayOnValue: settings.pvControl?.relayOnValue,
+            relayOnValue: settings.pvControl.relayOnValue,
             relayValue: relay?.val,
             relayTimestamp: relay?.ts,
             power: power?.value,
