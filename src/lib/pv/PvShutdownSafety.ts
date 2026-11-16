@@ -307,3 +307,46 @@ export function parsePvPersistedStop(
         relayOffConfirmed: true,
     };
 }
+
+/** Inputs for read-only restoration of a previously confirmed PV stop. */
+export interface PvStopRestoration {
+    storedRecord: unknown;
+    minerId: string;
+    relayStateId: string;
+    relayOnValue: boolean;
+    relayValue: unknown;
+    relayTimestamp: number | undefined;
+    power: number | undefined;
+    powerTimestamp: number | undefined;
+    now: number;
+    maxAgeMs: number;
+}
+
+/**
+ * Check persisted history against fresh OFF relay and near-zero power evidence.
+ * This is diagnostic only and never authorizes miner restart.
+ *
+ * @param values - stored history, configuration and current measurements
+ */
+export function isPvStopRestorationConsistent(values: PvStopRestoration): boolean {
+    const fresh = (timestamp: number | undefined): boolean =>
+        typeof timestamp === 'number' &&
+        Number.isFinite(timestamp) &&
+        timestamp <= values.now &&
+        timestamp >= 0 &&
+        values.now - timestamp <= values.maxAgeMs;
+    return (
+        Number.isFinite(values.now) &&
+        Number.isFinite(values.maxAgeMs) &&
+        values.maxAgeMs > 0 &&
+        typeof values.relayOnValue === 'boolean' &&
+        parsePvPersistedStop(values.storedRecord, values.minerId, values.relayStateId, values.now) !== undefined &&
+        fresh(values.relayTimestamp) &&
+        values.relayValue === !values.relayOnValue &&
+        fresh(values.powerTimestamp) &&
+        typeof values.power === 'number' &&
+        Number.isFinite(values.power) &&
+        values.power >= 0 &&
+        values.power <= 5
+    );
+}
