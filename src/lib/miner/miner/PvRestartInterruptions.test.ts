@@ -46,15 +46,16 @@ describe('PV restart interruption simulation (no hardware)', () => {
         let restarting = false;
         const attempt = manager.withExclusiveMiner('s9', async () => {
             await executePvStartup({
-                mayPowerOn: async () => true,
+                mayPowerOn: () => Promise.resolve(true),
                 powerOnRelay: async () => {
                     entered();
                     await relayRequest;
                 },
-                awaitReadiness: async () => ready(),
-                mayStartMining: async () => !restarting,
-                startMining: async () => {
+                awaitReadiness: () => Promise.resolve(ready()),
+                mayStartMining: () => Promise.resolve(!restarting),
+                startMining: () => {
                     calls.push('unexpected-start');
+                    return Promise.resolve();
                 },
             });
         }).then(
@@ -78,14 +79,16 @@ describe('PV restart interruption simulation (no hardware)', () => {
         const { manager, locks, calls } = setup();
         const attempt = manager.withExclusiveMiner('s9', () =>
             executePvStartup({
-                mayPowerOn: async () => true,
-                powerOnRelay: async () => {
+                mayPowerOn: () => Promise.resolve(true),
+                powerOnRelay: () => {
                     calls.push('relay-on-request');
+                    return Promise.resolve();
                 },
-                awaitReadiness: async () => ({ ...ready(), minerReachable: false }),
-                mayStartMining: async () => true,
-                startMining: async () => {
+                awaitReadiness: () => Promise.resolve({ ...ready(), minerReachable: false }),
+                mayStartMining: () => Promise.resolve(true),
+                startMining: () => {
                     calls.push('unexpected-start');
+                    return Promise.resolve();
                 },
             }),
         );
@@ -99,15 +102,16 @@ describe('PV restart interruption simulation (no hardware)', () => {
         const { manager, locks, calls } = setup();
         const attempt = manager.withExclusiveMiner('s19', () =>
             executePvStartup({
-                mayPowerOn: async () => true,
-                powerOnRelay: async () => {
+                mayPowerOn: () => Promise.resolve(true),
+                powerOnRelay: () => {
                     calls.push('relay-on-request');
+                    return Promise.resolve();
                 },
-                awaitReadiness: async () => ready(),
-                mayStartMining: async () => true,
-                startMining: async () => {
+                awaitReadiness: () => Promise.resolve(ready()),
+                mayStartMining: () => Promise.resolve(true),
+                startMining: () => {
                     calls.push('miner-start-request');
-                    throw new Error('miner did not confirm start');
+                    return Promise.reject(new Error('miner did not confirm start'));
                 },
             }),
         );
