@@ -2,6 +2,7 @@ import { expect } from 'chai';
 import {
     executePvStartup,
     isPvRestartAllowed,
+    isPvRestartUnlockCandidate,
     isPvStartReady,
     isPvStopRestorationConsistent,
     parsePvPersistedStop,
@@ -1151,5 +1152,84 @@ describe('PV command policy for custom features and state controls', () => {
 
     it('permits commands only when no safety lock is active', () => {
         expect(isPvMinerCommandAllowed(minerId, new Set<string>(), new Set<string>(), false)).to.equal(true);
+    });
+});
+
+describe('PV restart unlock candidate remains read-only', () => {
+    const now = 1_800_000_000_000;
+    const relayPoweredOnAt = now - 120_000;
+    const lockedMiners = new Set(['s9', 's19']);
+    const candidate = (minerId: string) => ({
+        minerId,
+        lockedMiners,
+        activeSafeStops: new Set<string>(),
+        adapterShuttingDown: false,
+        relayPoweredOnAt,
+        restart: {
+            enabled: true,
+            relayConfirmedOff: true,
+            gridPower: -2500,
+            batteryPower: 0,
+            gridTimestamp: now,
+            batteryTimestamp: now,
+            now,
+            maxAgeMs: 15_000,
+            reserveWatts: 200,
+            minimumStartWatts: 1800,
+            lastStoppedAt: now - 300_000,
+            restartDelayMs: 180_000,
+        },
+        readiness: {
+            relayOn: true,
+            relayTimestamp: now,
+            relayEnabledAt: relayPoweredOnAt,
+            minerReachable: true,
+            minerSeenAt: now,
+            now,
+            maxAgeMs: 15_000,
+            startupDelayMs: 120_000,
+        },
+    });
+
+    it('recognizes eligible S9 and S19 independently without unlocking either miner', () => {
+        expect(isPvRestartUnlockCandidate(candidate('s9'))).to.equal(true);
+        expect(isPvRestartUnlockCandidate(candidate('s19'))).to.equal(true);
+        expect(lockedMiners.has('s9')).to.equal(true);
+        expect(lockedMiners.has('s19')).to.equal(true);
+    });
+
+    it('rejects measurements that predate relay power-on', () => {
+        const values = candidate('s9');
+        expect(isPvRestartUnlockCandidate({
+            ...values,
+            restart: { ...values.restart, gridTimestamp: relayPoweredOnAt },
+        })).to.equal(false);
+        expect(isPvRestartUnlockCandidate({
+            ...values,
+            restart: { ...values.restart, batteryTimestamp: relayPoweredOnAt },
+        })).to.equal(false);
+    });
+
+    it('rejects a mismatched relay-on event or stale relay feedback', () => {
+        const values = candidate('s19');
+        expect(isPvRestartUnlockCandidate({
+            ...values,
+            readiness: { ...values.readiness, relayEnabledAt: relayPoweredOnAt - 1 },
+        })).to.equal(false);
+        expect(isPvRestartUnlockCandidate({
+            ...values,
+            readiness: { ...values.readiness, relayTimestamp: now - 20_000 },
+        })).to.equal(false);
+    });
+
+    it('rejects shutdown, active safe stop, absent lock and lost PV export', () => {
+        const values = candidate('s9');
+        expect(isPvRestartUnlockCandidate({ ...values, adapterShuttingDown: true })).to.equal(false);
+        expect(isPvRestartUnlockCandidate({ ...values, activeSafeStops: new Set(['s9']) })).to.equal(false);
+        expect(isPvRestartUnlockCandidate({ ...values, lockedMiners: new Set(['s19']) })).to.equal(false);
+        expect(isPvRestartUnlockCandidate({
+            ...values,
+            restart: { ...values.restart, gridPower: -100 },
+        })).to.equal(false);
     });
 });
