@@ -36,10 +36,7 @@ export class MinerManager {
      * Reserve exclusive access to a miner across a multi-step control operation.
      * Use the provided miner rather than calling other manager methods inside the callback.
      */
-    public async withExclusiveMiner<T>(
-        id: string,
-        operation: (miner: Miner<MinerSettings>) => Promise<T>,
-    ): Promise<T> {
+    public async withExclusiveMiner<T>(id: string, operation: (miner: Miner<MinerSettings>) => Promise<T>): Promise<T> {
         return this.runSerialized(id, async () => {
             const miner = this.getMinerById(id);
             if (!miner) {
@@ -48,7 +45,6 @@ export class MinerManager {
             return operation(miner);
         });
     }
-
 
     /**
      *

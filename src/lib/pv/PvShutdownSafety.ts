@@ -24,10 +24,7 @@ export function isPvShutdownSafe(
     pausedAt: number,
 ): boolean {
     const fresh = (timestamp: number | undefined): boolean =>
-        timestamp !== undefined &&
-        Number.isFinite(timestamp) &&
-        timestamp <= now &&
-        now - timestamp <= maxAgeMs;
+        timestamp !== undefined && Number.isFinite(timestamp) && timestamp <= now && now - timestamp <= maxAgeMs;
 
     return (
         values.hashrate === 0 &&
@@ -82,10 +79,7 @@ export class PvShutdownConfirmation {
             return false;
         }
 
-        if (
-            this.lastCheckAt !== undefined &&
-            (now < this.lastCheckAt || now - this.lastCheckAt > maxCheckGapMs)
-        ) {
+        if (this.lastCheckAt !== undefined && (now < this.lastCheckAt || now - this.lastCheckAt > maxCheckGapMs)) {
             this.reset();
         }
 

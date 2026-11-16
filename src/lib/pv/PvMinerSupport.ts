@@ -6,10 +6,5 @@
  * fresh power measurements and stable shutdown confirmation.
  */
 export function supportsPvSafeStop(minerType: string): boolean {
-    return [
-        'bosMiner',
-        'bos',
-        'xmRig',
-        'iceRiverOcMiner',
-    ].includes(minerType);
+    return ['bosMiner', 'bos', 'xmRig', 'iceRiverOcMiner'].includes(minerType);
 }

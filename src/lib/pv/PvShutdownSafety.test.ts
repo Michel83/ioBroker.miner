@@ -27,38 +27,73 @@ describe('PV shutdown safety', () => {
     });
 
     it('rejects stale hashrate', () => {
-        expect(isPvShutdownSafe({
-            ...valid(),
-            hashrateTimestamp: now - maxAgeMs - 1,
-        }, now, maxAgeMs, pausedAt)).to.equal(false);
+        expect(
+            isPvShutdownSafe(
+                {
+                    ...valid(),
+                    hashrateTimestamp: now - maxAgeMs - 1,
+                },
+                now,
+                maxAgeMs,
+                pausedAt,
+            ),
+        ).to.equal(false);
     });
 
     it('rejects stale Sonoff power', () => {
-        expect(isPvShutdownSafe({
-            ...valid(),
-            powerTimestamp: now - maxAgeMs - 1,
-        }, now, maxAgeMs, pausedAt)).to.equal(false);
+        expect(
+            isPvShutdownSafe(
+                {
+                    ...valid(),
+                    powerTimestamp: now - maxAgeMs - 1,
+                },
+                now,
+                maxAgeMs,
+                pausedAt,
+            ),
+        ).to.equal(false);
     });
 
     it('rejects stale miner communication', () => {
-        expect(isPvShutdownSafe({
-            ...valid(),
-            lastSeen: now - maxAgeMs - 1,
-        }, now, maxAgeMs, pausedAt)).to.equal(false);
+        expect(
+            isPvShutdownSafe(
+                {
+                    ...valid(),
+                    lastSeen: now - maxAgeMs - 1,
+                },
+                now,
+                maxAgeMs,
+                pausedAt,
+            ),
+        ).to.equal(false);
     });
 
     it('rejects missing measurements', () => {
-        expect(isPvShutdownSafe({
-            ...valid(),
-            hashrate: undefined,
-        }, now, maxAgeMs, pausedAt)).to.equal(false);
+        expect(
+            isPvShutdownSafe(
+                {
+                    ...valid(),
+                    hashrate: undefined,
+                },
+                now,
+                maxAgeMs,
+                pausedAt,
+            ),
+        ).to.equal(false);
     });
 
     it('rejects negative power', () => {
-        expect(isPvShutdownSafe({
-            ...valid(),
-            power: -10,
-        }, now, maxAgeMs, pausedAt)).to.equal(false);
+        expect(
+            isPvShutdownSafe(
+                {
+                    ...valid(),
+                    power: -10,
+                },
+                now,
+                maxAgeMs,
+                pausedAt,
+            ),
+        ).to.equal(false);
     });
 
     it('rejects hashrate measured before pause completed', () => {
@@ -78,7 +113,6 @@ describe('PV shutdown safety', () => {
 
         expect(isPvShutdownSafe(values, now, maxAgeMs, pausedAt)).to.equal(false);
     });
-
 });
 
 describe('PV shutdown confirmation', () => {
@@ -131,17 +165,11 @@ describe('PV shutdown confirmation', () => {
         const check = new PvShutdownConfirmation();
         check.update(valid(now), now, maxAgeMs, pausedAt);
 
-        check.update(
-            { ...valid(now + 10_000), power: 150 },
-            now + 10_000,
-            maxAgeMs,
-            pausedAt,
-        );
+        check.update({ ...valid(now + 10_000), power: 150 }, now + 10_000, maxAgeMs, pausedAt);
 
         expect(check.update(valid(now + 30_000), now + 30_000, maxAgeMs, pausedAt)).to.equal(false);
     });
 });
-
 
 describe('PV shutdown measurement gaps', () => {
     it('rejects a 30-second gap without intermediate measurements', () => {
@@ -160,9 +188,7 @@ describe('PV shutdown measurement gaps', () => {
 
         expect(check.update(values(now), now, maxAgeMs, pausedAt)).to.equal(false);
 
-        expect(
-            check.update(values(now + 30_000), now + 30_000, maxAgeMs, pausedAt),
-        ).to.equal(false);
+        expect(check.update(values(now + 30_000), now + 30_000, maxAgeMs, pausedAt)).to.equal(false);
     });
 });
 
@@ -184,9 +210,7 @@ describe('PV shutdown unchanged measurements', () => {
         expect(check.update(values, now, maxAgeMs, pausedAt)).to.equal(false);
 
         for (let seconds = 5; seconds <= 30; seconds += 5) {
-            expect(
-                check.update(values, now + seconds * 1000, maxAgeMs, pausedAt),
-            ).to.equal(false);
+            expect(check.update(values, now + seconds * 1000, maxAgeMs, pausedAt)).to.equal(false);
         }
     });
 });
@@ -212,11 +236,18 @@ describe('PV shutdown independent measurements', () => {
         for (let seconds = 5; seconds <= 30; seconds += 5) {
             const timestamp = now + seconds * 1000;
 
-            expect(check.update({
-                ...valid(),
-                hashrateTimestamp: timestamp,
-                lastSeen: timestamp,
-            }, timestamp, maxAgeMs, pausedAt)).to.equal(false);
+            expect(
+                check.update(
+                    {
+                        ...valid(),
+                        hashrateTimestamp: timestamp,
+                        lastSeen: timestamp,
+                    },
+                    timestamp,
+                    maxAgeMs,
+                    pausedAt,
+                ),
+            ).to.equal(false);
         }
     });
 
@@ -228,10 +259,17 @@ describe('PV shutdown independent measurements', () => {
         for (let seconds = 5; seconds <= 30; seconds += 5) {
             const timestamp = now + seconds * 1000;
 
-            expect(check.update({
-                ...valid(),
-                powerTimestamp: timestamp,
-            }, timestamp, maxAgeMs, pausedAt)).to.equal(false);
+            expect(
+                check.update(
+                    {
+                        ...valid(),
+                        powerTimestamp: timestamp,
+                    },
+                    timestamp,
+                    maxAgeMs,
+                    pausedAt,
+                ),
+            ).to.equal(false);
         }
     });
 });
@@ -254,9 +292,7 @@ describe('PV shutdown sensor update gaps', () => {
                 lastSeen: timestamp,
             };
 
-            expect(
-                check.update(values, timestamp, maxAgeMs, pausedAt),
-            ).to.equal(false);
+            expect(check.update(values, timestamp, maxAgeMs, pausedAt)).to.equal(false);
         }
     });
 });
@@ -274,9 +310,7 @@ describe('PV shutdown future timestamps', () => {
             lastSeen: now,
         };
 
-        expect(
-            isPvShutdownSafe(values, now, 180_000, pausedAt),
-        ).to.equal(false);
+        expect(isPvShutdownSafe(values, now, 180_000, pausedAt)).to.equal(false);
     });
 
     it('rejects future lastSeen timestamps', () => {
@@ -291,9 +325,7 @@ describe('PV shutdown future timestamps', () => {
             lastSeen: now + 5000,
         };
 
-        expect(
-            isPvShutdownSafe(values, now, 180_000, pausedAt),
-        ).to.equal(false);
+        expect(isPvShutdownSafe(values, now, 180_000, pausedAt)).to.equal(false);
     });
 });
 
@@ -311,20 +343,10 @@ describe('PV shutdown slow polling', () => {
             lastSeen: timestamp,
         });
 
-        expect(
-            check.update(sample(start), start, 180_000, pausedAt),
-        ).to.equal(false);
+        expect(check.update(sample(start), start, 180_000, pausedAt)).to.equal(false);
 
         expect(
-            check.update(
-                sample(start + 30_000),
-                start + 30_000,
-                180_000,
-                pausedAt,
-                30_000,
-                35_000,
-                35_000,
-            ),
+            check.update(sample(start + 30_000), start + 30_000, 180_000, pausedAt, 30_000, 35_000, 35_000),
         ).to.equal(false);
     });
 });
@@ -346,19 +368,9 @@ describe('PV shutdown irregular sensor updates', () => {
         for (let seconds = 0; seconds <= 30; seconds += 5) {
             const now = start + seconds * 1000;
 
-            const measurementTime =
-                seconds === 0 ? start :
-                seconds < 30 ? start + 5000 :
-                now;
+            const measurementTime = seconds === 0 ? start : seconds < 30 ? start + 5000 : now;
 
-            expect(
-                check.update(
-                    sample(measurementTime),
-                    now,
-                    180_000,
-                    pausedAt,
-                ),
-            ).to.equal(false);
+            expect(check.update(sample(measurementTime), now, 180_000, pausedAt)).to.equal(false);
         }
     });
 });
@@ -376,14 +388,11 @@ describe('PV shutdown independent sensor gaps', () => {
                 hashrate: 0,
                 hashrateTimestamp: now,
                 power: 75,
-                powerTimestamp:
-                    seconds < 30 ? start : now,
+                powerTimestamp: seconds < 30 ? start : now,
                 lastSeen: now,
             };
 
-            expect(
-                check.update(values, now, 180_000, pausedAt),
-            ).to.equal(false);
+            expect(check.update(values, now, 180_000, pausedAt)).to.equal(false);
         }
     });
 });

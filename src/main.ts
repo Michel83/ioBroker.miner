@@ -280,7 +280,9 @@ export class MinerAdapter extends utils.Adapter {
                     }
 
                     if (this.pvSafeStops.has(deviceSettings.settings.id) || this.pvShuttingDown) {
-                        this.log.warn(`setProfile blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`);
+                        this.log.warn(
+                            `setProfile blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`,
+                        );
                         return;
                     }
 
@@ -314,7 +316,9 @@ export class MinerAdapter extends utils.Adapter {
                     }
 
                     if (this.pvSafeStops.has(deviceSettings.settings.id) || this.pvShuttingDown) {
-                        this.log.warn(`setPowerTarget blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`);
+                        this.log.warn(
+                            `setPowerTarget blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`,
+                        );
                         return;
                     }
 
@@ -363,7 +367,9 @@ export class MinerAdapter extends utils.Adapter {
             return;
         }
         if (this.pvSafeStops.has(minerId) || this.pvShuttingDown) {
-            this.log.warn(`custom feature ${featureId} blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`);
+            this.log.warn(
+                `custom feature ${featureId} blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`,
+            );
             return;
         }
 
@@ -1251,7 +1257,7 @@ export class MinerAdapter extends utils.Adapter {
         try {
             this.log.info(`PV safe stop requested for ${settings.name}; relay stays ON until confirmed`);
             await this.minerManager.withExclusiveMiner(id, async miner => {
-                    await miner.stop();
+                await miner.stop();
                 pausedAt = Date.now();
                 // A successful pause command is not proof of stopped hardware.
                 while (Date.now() - started < maxWaitMs) {
@@ -1324,7 +1330,8 @@ export class MinerAdapter extends utils.Adapter {
                             typeof finalRelay.ts !== 'number' ||
                             finalRelay.ts > finalNow ||
                             finalNow - finalRelay.ts > ageMs ||
-                            this.config.pvEnabled !== true || this.pvShuttingDown
+                            this.config.pvEnabled !== true ||
+                            this.pvShuttingDown
                         ) {
                             throw new Error(`Final PV shutdown safety check failed for ${settings.name}`);
                         }
