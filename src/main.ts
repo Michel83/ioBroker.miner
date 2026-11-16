@@ -1353,10 +1353,42 @@ export class MinerAdapter extends utils.Adapter {
                             throw new Error(`Final PV shutdown safety check failed for ${settings.name}`);
                         }
 
-                        await this.setForeignStateAsync(pv.relayStateId, !pv.relayOnValue);
+                        // Block all further miner commands before requesting relay OFF.
+                        // An acknowledgement of the write is not proof of power loss.
                         this.pvRelayOffMiners.add(id);
-                        this.log.info(`PV safe stop confirmed for ${settings.name}; relay switched OFF`);
-                        return;
+                        const relayOffRequestedAt = Date.now();
+                        await this.setForeignStateAsync(pv.relayStateId, !pv.relayOnValue);
+                        let lastPowerTimestamp = relayOffRequestedAt;
+                        let zeroPowerSamples = 0;
+                        const confirmationDeadline = Date.now() + 90_000;
+                        while (Date.now() < confirmationDeadline && !this.pvShuttingDown) {
+                            await this.delay(5_000);
+                            const sample = await this.readFreshPvMeasurement(pv.powerStateId, ageMs);
+                            if (!sample || sample.timestamp <= lastPowerTimestamp) {
+                                continue;
+                            }
+                            lastPowerTimestamp = sample.timestamp;
+                            zeroPowerSamples = sample.value >= 0 && sample.value <= 5 ? zeroPowerSamples + 1 : 0;
+                            if (zeroPowerSamples >= 3) {
+                                const record = {
+                                    minerId: id,
+                                    relayStateId: pv.relayStateId,
+                                    stoppedAt: Date.now(),
+                                    relayOffConfirmed: true,
+                                };
+                                await this.setState('pvControl.lastSafeStop', {
+                                    val: JSON.stringify(record),
+                                    ack: true,
+                                });
+                                this.log.info(
+                                    `PV safe stop for ${settings.name}: three fresh near-zero power samples confirmed`,
+                                );
+                                return;
+                            }
+                        }
+                        throw new Error(
+                            `PV relay OFF requested for ${settings.name}, but power loss was not confirmed; miner commands remain blocked`,
+                        );
                     }
                     await this.delay(5_000);
                 }
