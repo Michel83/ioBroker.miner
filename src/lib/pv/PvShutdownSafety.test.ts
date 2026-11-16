@@ -1,5 +1,11 @@
 import { expect } from 'chai';
-import { isPvRestartAllowed, isPvShutdownSafe, PvShutdownConfirmation, type PvRestartMeasurements, type PvShutdownMeasurements } from './PvShutdownSafety';
+import {
+    isPvRestartAllowed,
+    isPvShutdownSafe,
+    PvShutdownConfirmation,
+    type PvRestartMeasurements,
+    type PvShutdownMeasurements,
+} from './PvShutdownSafety';
 
 describe('PV shutdown safety', () => {
     const now = 1_800_000_000_000;
