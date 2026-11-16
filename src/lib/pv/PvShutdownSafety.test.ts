@@ -613,7 +613,9 @@ describe('PV persisted stop record validation', () => {
 
     it('rejects missing and unconfirmed records', () => {
         expect(parsePvPersistedStop(undefined, 's19', 'sonoff.0.relay.POWER', now)).to.equal(undefined);
-        expect(parsePvPersistedStop({ ...valid(), relayOffConfirmed: false }, 's19', 'sonoff.0.relay.POWER', now)).to.equal(undefined);
+        expect(
+            parsePvPersistedStop({ ...valid(), relayOffConfirmed: false }, 's19', 'sonoff.0.relay.POWER', now),
+        ).to.equal(undefined);
     });
 
     it('rejects records belonging to another miner or relay', () => {
@@ -622,8 +624,14 @@ describe('PV persisted stop record validation', () => {
     });
 
     it('rejects future, missing and invalid timestamps', () => {
-        expect(parsePvPersistedStop({ ...valid(), stoppedAt: now + 1 }, 's19', 'sonoff.0.relay.POWER', now)).to.equal(undefined);
-        expect(parsePvPersistedStop({ ...valid(), stoppedAt: null }, 's19', 'sonoff.0.relay.POWER', now)).to.equal(undefined);
-        expect(parsePvPersistedStop({ ...valid(), stoppedAt: Number.NaN }, 's19', 'sonoff.0.relay.POWER', now)).to.equal(undefined);
+        expect(parsePvPersistedStop({ ...valid(), stoppedAt: now + 1 }, 's19', 'sonoff.0.relay.POWER', now)).to.equal(
+            undefined,
+        );
+        expect(parsePvPersistedStop({ ...valid(), stoppedAt: null }, 's19', 'sonoff.0.relay.POWER', now)).to.equal(
+            undefined,
+        );
+        expect(
+            parsePvPersistedStop({ ...valid(), stoppedAt: Number.NaN }, 's19', 'sonoff.0.relay.POWER', now),
+        ).to.equal(undefined);
     });
 });
