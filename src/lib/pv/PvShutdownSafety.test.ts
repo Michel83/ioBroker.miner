@@ -1,9 +1,11 @@
 import { expect } from 'chai';
 import {
     isPvRestartAllowed,
+    isPvStartReady,
     isPvShutdownSafe,
     PvShutdownConfirmation,
     type PvRestartMeasurements,
+    type PvStartReadiness,
     type PvShutdownMeasurements,
 } from './PvShutdownSafety';
 
@@ -443,5 +445,42 @@ describe('PV automatic restart eligibility', () => {
     it('requires a known completed stop and elapsed restart delay', () => {
         expect(isPvRestartAllowed({ ...valid(), lastStoppedAt: undefined })).to.equal(false);
         expect(isPvRestartAllowed({ ...valid(), lastStoppedAt: now - 179_999 })).to.equal(false);
+    });
+});
+
+describe('PV miner startup readiness', () => {
+    const now = 1_800_000_000_000;
+    const valid = (): PvStartReadiness => ({
+        relayOn: true,
+        relayTimestamp: now,
+        relayEnabledAt: now - 120_000,
+        minerReachable: true,
+        minerSeenAt: now,
+        now,
+        maxAgeMs: 15_000,
+        startupDelayMs: 120_000,
+    });
+
+    it('permits start after confirmed power-on, boot delay and fresh miner contact', () => {
+        expect(isPvStartReady(valid())).to.equal(true);
+    });
+
+    it('blocks start while relay is off or its feedback is stale', () => {
+        expect(isPvStartReady({ ...valid(), relayOn: false })).to.equal(false);
+        expect(isPvStartReady({ ...valid(), relayTimestamp: now - 20_000 })).to.equal(false);
+    });
+
+    it('blocks start until boot delay completes', () => {
+        expect(isPvStartReady({ ...valid(), relayEnabledAt: now - 119_999 })).to.equal(false);
+    });
+
+    it('blocks start when miner is unreachable or its last contact is stale', () => {
+        expect(isPvStartReady({ ...valid(), minerReachable: false })).to.equal(false);
+        expect(isPvStartReady({ ...valid(), minerSeenAt: now - 20_000 })).to.equal(false);
+    });
+
+    it('requires miner contact after relay was enabled', () => {
+        expect(isPvStartReady({ ...valid(), minerSeenAt: now - 120_001 })).to.equal(false);
+        expect(isPvStartReady({ ...valid(), relayEnabledAt: undefined })).to.equal(false);
     });
 });
