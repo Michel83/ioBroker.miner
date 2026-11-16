@@ -17,9 +17,7 @@ describe('PV regulation V2.43 read-only calculations', () => {
     });
 
     it('subtracts battery discharge and rejects missing measurements', () => {
-        expect(calculatePvV243({ gridPower: -2000, batteryPower: 200, batterySoc: 95 })?.availableWatts).to.equal(
-            1800,
-        );
+        expect(calculatePvV243({ gridPower: -2000, batteryPower: 200, batterySoc: 95 })?.availableWatts).to.equal(1800);
         expect(calculatePvV243({ gridPower: -2000, batteryPower: undefined, batterySoc: 95 })).to.equal(undefined);
         expect(calculatePvV243({ gridPower: -2000, batteryPower: 0, batterySoc: undefined })).to.equal(undefined);
     });

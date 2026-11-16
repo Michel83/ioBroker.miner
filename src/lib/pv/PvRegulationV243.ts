@@ -35,12 +35,8 @@ export function calculatePvV243(values: PvV243Inputs): PvV243Result | undefined 
         return undefined;
     }
 
-    const batteryChargeDeficitWatts =
-        batterySoc < 90 ? Math.max(0, 1200 - Math.max(0, -batteryPower)) : 0;
-    const availableWatts = Math.max(
-        0,
-        -gridPower - Math.max(0, batteryPower) - batteryChargeDeficitWatts,
-    );
+    const batteryChargeDeficitWatts = batterySoc < 90 ? Math.max(0, 1200 - Math.max(0, -batteryPower)) : 0;
+    const availableWatts = Math.max(0, -gridPower - Math.max(0, batteryPower) - batteryChargeDeficitWatts);
     return {
         availableWatts,
         batteryChargeDeficitWatts,
