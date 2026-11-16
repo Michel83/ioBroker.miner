@@ -105,9 +105,10 @@ describe('PV restart unlock and miner command queue (simulation only)', () => {
 
     it('does not release S19 when S9 is unlocked in the serialized simulation', async () => {
         const { manager, locks, calls } = setup();
-        await manager.withExclusiveMiner('s9', async () => {
+        await manager.withExclusiveMiner('s9', () => {
             expect(isPvRestartUnlockCandidate(evidence('s9', locks))).to.equal(true);
             locks.delete('s9');
+            return Promise.resolve();
         });
         const s19Blocked = await manager.startMiner('s19').then(
             () => false,
