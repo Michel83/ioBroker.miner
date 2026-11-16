@@ -1457,11 +1457,17 @@ export class MinerAdapter extends utils.Adapter {
             throw new Error(`PV safe stop only implemented for BOSMiner: ${settings.name}`);
         }
         const feedbackId = pv.relayFeedbackStateId || pv.relayStateId;
-        const confirmationTimeoutMs = Math.max(90, Number(pv.relayOffConfirmationTimeout) || 90) * 1000;
+        const powerSampleGapMs = Math.min(300, Math.max(15, Number(pv.powerSampleMaxGap) || 15)) * 1000;
+        // Three distinct samples can require two full telemetry intervals after the first update.
+        const confirmationTimeoutMs = Math.max(
+            90_000,
+            (Number(pv.relayOffConfirmationTimeout) || 90) * 1000,
+            3 * powerSampleGapMs + 30_000,
+        );
         this.pvSafeStops.add(id);
         const deviceId = this.getDeviceObjectId(settings);
         const ageMs = Math.max(10, Number(this.config.pvMaxDataAge) || 180) * 1000;
-        const maxWaitMs = 5 * 60_000;
+        const maxWaitMs = Math.max(5 * 60_000, 3 * powerSampleGapMs + 60_000);
         const started = Date.now();
         const confirmation = new PvShutdownConfirmation();
         let pausedAt = 0;
@@ -1503,6 +1509,9 @@ export class MinerAdapter extends utils.Adapter {
                         now,
                         ageMs,
                         pausedAt,
+                        30_000,
+                        10_000,
+                        powerSampleGapMs,
                     );
 
                     const delayMs = Math.max(0, Number(pv.shutdownDelay) || 0) * 1000;
@@ -1512,9 +1521,10 @@ export class MinerAdapter extends utils.Adapter {
                         if (this.config.pvEnabled !== true || this.pvShuttingDown) {
                             throw new Error('PV automation disabled before relay shutdown');
                         }
-                        // Final independent check immediately before relay shutdown.
+                        // Final independent check: accept only a post-pause sample within the configured
+                        // telemetry gap. Slow sensors must still provide three distinct fresh samples.
                         const [finalPower, finalHash, finalSeen, finalRelay] = await Promise.all([
-                            this.readFreshPvMeasurement(pv.powerStateId, 15_000),
+                            this.readFreshPvMeasurement(pv.powerStateId, powerSampleGapMs),
                             this.getStateAsync(`${deviceId}.stats.totalHashrate`),
                             this.getStateAsync(`${deviceId}.info.lastSeen`),
                             this.getForeignStateAsync(feedbackId),
@@ -1531,7 +1541,7 @@ export class MinerAdapter extends utils.Adapter {
                                 lastSeen: typeof finalSeen?.val === 'number' ? finalSeen.val : undefined,
                             },
                             finalNow,
-                            15_000,
+                            powerSampleGapMs,
                             pausedAt,
                         );
 
