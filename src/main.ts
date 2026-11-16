@@ -19,7 +19,7 @@ import { isWithinPowerTargetConstraints, type Miner } from './lib/miner/miner/Mi
 import type { MinerSettings } from './lib/miner/model/MinerSettings';
 import type { MinerStats } from './lib/miner/model/MinerStats';
 import { asyncDynamicInterval, setTimerBackend, type AsyncIntervalReturnType } from './lib/utils/delay';
-import { PvShutdownConfirmation, isPvShutdownSafe, parsePvPersistedStop } from './lib/pv/PvShutdownSafety';
+import { PvShutdownConfirmation, isPvShutdownSafe, isPvStopRestorationConsistent } from './lib/pv/PvShutdownSafety';
 import { UpdateSources } from './lib/update/UpdateSources';
 import { runUpdateChecks, type UpdateCheckSummary } from './lib/update/runUpdateChecks';
 import type { UpdateCheckContext, UpdateCheckResult } from './lib/miner/model/UpdateCheckResult';
@@ -442,17 +442,24 @@ export class MinerAdapter extends utils.Adapter {
         } catch {
             raw = undefined;
         }
-        const record = parsePvPersistedStop(raw, minerId, relayId, Date.now());
         const ageMs = Math.max(10, Number(this.config.pvMaxDataAge) || 180) * 1000;
         const [power, relay] = await Promise.all([
             this.readFreshPvMeasurement(settings.pvControl?.powerStateId || '', ageMs),
             this.getForeignStateAsync(relayId),
         ]);
-        const now = Date.now();
-        const relayFresh = typeof relay?.ts === 'number' && relay.ts <= now && now - relay.ts <= ageMs;
-        const relayOff = relayFresh && relay?.val === !settings.pvControl?.relayOnValue;
-        const powerOff = power !== undefined && power.value >= 0 && power.value <= 5;
-        if (record && relayOff && powerOff) {
+        const consistent = isPvStopRestorationConsistent({
+            storedRecord: raw,
+            minerId,
+            relayStateId: relayId,
+            relayOnValue: settings.pvControl?.relayOnValue,
+            relayValue: relay?.val,
+            relayTimestamp: relay?.ts,
+            power: power?.value,
+            powerTimestamp: power?.timestamp,
+            now: Date.now(),
+            maxAgeMs: ageMs,
+        });
+        if (consistent) {
             this.log.info(
                 `PV stop history for ${settings.name} matches fresh OFF/zero-power diagnostics; restart remains locked`,
             );
