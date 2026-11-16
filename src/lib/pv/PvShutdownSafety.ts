@@ -191,6 +191,7 @@ export function isPvRestartAllowed(values: PvRestartMeasurements): boolean {
 /** Evidence required before issuing a miner start command after relay power-on. */
 export interface PvStartReadiness {
     relayOn: boolean;
+    relayAck: boolean;
     relayTimestamp: number | undefined;
     relayEnabledAt: number | undefined;
     minerReachable: boolean;
@@ -210,8 +211,12 @@ export function isPvStartReady(values: PvStartReadiness): boolean {
 
     return (
         values.relayOn &&
+        values.relayAck === true &&
         values.minerReachable &&
         fresh(values.relayTimestamp) &&
+        values.relayEnabledAt !== undefined &&
+        values.relayTimestamp !== undefined &&
+        values.relayTimestamp > values.relayEnabledAt &&
         fresh(values.minerSeenAt) &&
         values.relayEnabledAt !== undefined &&
         Number.isFinite(values.relayEnabledAt) &&
