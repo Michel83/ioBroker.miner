@@ -1040,10 +1040,7 @@ describe('PV command policy for custom features and state controls', () => {
         const safeStops = new Set<string>();
         const restartLocked = new Set([minerId]);
         for (const command of ['start', 'profile', 'powerTarget', 'customFeature']) {
-            expect(
-                isPvMinerCommandAllowed(minerId, safeStops, restartLocked, false),
-                command,
-            ).to.equal(false);
+            expect(isPvMinerCommandAllowed(minerId, safeStops, restartLocked, false), command).to.equal(false);
         }
     });
 
