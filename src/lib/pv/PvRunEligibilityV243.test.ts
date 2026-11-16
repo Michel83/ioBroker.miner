@@ -139,5 +139,4 @@ describe('V2.43 read-only start and stop eligibility', () => {
         expect(afterRestart.s19).to.equal('switch-stabilizing');
         expect(afterRestart.s9ToS19CandidateSince).to.equal(900000);
     });
-
 });
