@@ -763,3 +763,89 @@ describe('PV relay OFF acknowledgement', () => {
         ).to.equal(false);
     });
 });
+
+
+describe('PV shutdown with slow independent power telemetry', () => {
+    const base = 1_800_000_000_000;
+    const pausedAt = base - 1_000;
+    const maxAgeMs = 180_000;
+
+    function simulate(intervalSeconds: number, gapSeconds: number, powerReadings: number[]): boolean[] {
+        const confirmation = new PvShutdownConfirmation();
+        const results: boolean[] = [];
+        const intervalMs = intervalSeconds * 1000;
+        const end = (powerReadings.length - 1) * intervalMs;
+        for (let elapsed = 0; elapsed <= end; elapsed += 5_000) {
+            const readingIndex = Math.floor(elapsed / intervalMs);
+            const powerTimestamp = base + readingIndex * intervalMs;
+            const timestamp = base + elapsed;
+            const measurements: PvShutdownMeasurements = {
+                hashrate: 0,
+                hashrateTimestamp: timestamp,
+                power: powerReadings[readingIndex],
+                powerTimestamp,
+                lastSeen: timestamp,
+            };
+            results.push(
+                confirmation.update(measurements, timestamp, maxAgeMs, pausedAt, 30_000, 10_000, gapSeconds * 1000),
+            );
+        }
+        return results;
+    }
+
+    for (const intervalSeconds of [10, 30, 150]) {
+        it(`requires three distinct post-pause power readings at ${intervalSeconds}s telemetry intervals`, () => {
+            const results = simulate(intervalSeconds, intervalSeconds + 5, [75, 75, 75]);
+            expect(results.slice(0, -1).every(result => result === false)).to.equal(true);
+            expect(results[results.length - 1]).to.equal(true);
+        });
+
+        it(`does not confirm with only two power readings at ${intervalSeconds}s intervals`, () => {
+            expect(simulate(intervalSeconds, intervalSeconds + 5, [75, 75]).every(result => !result)).to.equal(true);
+        });
+
+        it(`rejects a power spike at ${intervalSeconds}s intervals`, () => {
+            expect(simulate(intervalSeconds, intervalSeconds + 5, [75, 150, 75]).every(result => !result)).to.equal(
+                true,
+            );
+        });
+    }
+
+    it('rejects telemetry that becomes older than the configured gap', () => {
+        const confirmation = new PvShutdownConfirmation();
+        const initial: PvShutdownMeasurements = {
+            hashrate: 0,
+            hashrateTimestamp: base,
+            power: 75,
+            powerTimestamp: base,
+            lastSeen: base,
+        };
+        expect(confirmation.update(initial, base, maxAgeMs, pausedAt, 30_000, 10_000, 35_000)).to.equal(false);
+        for (let elapsed = 5_000; elapsed <= 40_000; elapsed += 5_000) {
+            const current = base + elapsed;
+            expect(
+                confirmation.update(
+                    { ...initial, hashrateTimestamp: current, lastSeen: current },
+                    current,
+                    maxAgeMs,
+                    pausedAt,
+                    30_000,
+                    10_000,
+                    35_000,
+                ),
+            ).to.equal(false);
+        }
+    });
+
+    it('rejects measurements recorded before the pause command', () => {
+        const confirmation = new PvShutdownConfirmation();
+        const beforePause: PvShutdownMeasurements = {
+            hashrate: 0,
+            hashrateTimestamp: base,
+            power: 0,
+            powerTimestamp: pausedAt - 1,
+            lastSeen: base,
+        };
+        expect(confirmation.update(beforePause, base, maxAgeMs, pausedAt, 30_000, 10_000, 150_000)).to.equal(false);
+    });
+});
