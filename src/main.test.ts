@@ -191,6 +191,46 @@ describe('PV adapter initialization restart interlock', () => {
     }
 });
 
+describe('PV restart lock ignores persisted permission (no hardware)', () => {
+    for (const minerId of ['s9', 's19']) {
+        it(`keeps ${minerId} locked even if a saved state claims restart is allowed`, async () => {
+            const adapter = createTestAdapter();
+            const internal = adapter as unknown as {
+                pvRelayOffMiners: Set<string>;
+                restorePvStopDiagnostics: () => Promise<void>;
+            };
+            internal.restorePvStopDiagnostics = () => {
+                expect(internal.pvRelayOffMiners.has(minerId)).to.equal(true);
+                return Promise.resolve();
+            };
+            adapter.minerManager = {
+                init: () => Promise.reject(new Error('simulated miner offline')),
+                getMiners: () => [],
+            };
+            adapter.createDeviceStateObjects = () => Promise.resolve();
+            adapter.writeStaticInfoStates = () => Promise.resolve();
+            adapter.getStateAsync = () => Promise.resolve({ val: false });
+            adapter.setState = () => Promise.resolve();
+            (adapter as unknown as { setStateChangedAsync: () => Promise<void> }).setStateChangedAsync = () =>
+                Promise.resolve();
+            adapter.config.checkForUpdates = false;
+
+            await adapter.initDevice({
+                _id: `miner.0.miner.${minerId}`,
+                native: {
+                    category: 'miner',
+                    name: minerId,
+                    enabled: true,
+                    pvControl: { enabled: true },
+                    settings: { id: minerId, minerType: 'bos', host: 'localhost' },
+                },
+            } as unknown as ioBroker.DeviceObject);
+
+            expect(internal.pvRelayOffMiners.has(minerId)).to.equal(true);
+        });
+    }
+});
+
 describe('offline BOS update check after restart', () => {
     for (const enabled of [true, false]) {
         it(`uses persisted identity for an offline device (enabled=${enabled})`, async () => {
