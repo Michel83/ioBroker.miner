@@ -259,3 +259,51 @@ export async function executePvStartup(operations: PvStartupOperations): Promise
     }
     await operations.startMining();
 }
+
+/** Persisted PV relay shutdown record; never trust it without live relay feedback. */
+export interface PvPersistedStop {
+    minerId: string;
+    relayStateId: string;
+    stoppedAt: number;
+    relayOffConfirmed: boolean;
+}
+
+/**
+ * Validate a persisted stop record before it may contribute to a restart decision.
+ * An absent, malformed or mismatched record must keep automatic restart blocked.
+ *
+ * @param record - untrusted stored data
+ * @param minerId - currently configured miner identifier
+ * @param relayStateId - currently configured relay state identifier
+ * @param now - current time in milliseconds
+ */
+export function parsePvPersistedStop(
+    record: unknown,
+    minerId: string,
+    relayStateId: string,
+    now: number,
+): PvPersistedStop | undefined {
+    if (typeof record !== 'object' || record === null) {
+        return undefined;
+    }
+    const value = record as Partial<PvPersistedStop>;
+    if (
+        !minerId ||
+        !relayStateId ||
+        value.minerId !== minerId ||
+        value.relayStateId !== relayStateId ||
+        value.relayOffConfirmed !== true ||
+        typeof value.stoppedAt !== 'number' ||
+        !Number.isFinite(value.stoppedAt) ||
+        value.stoppedAt <= 0 ||
+        value.stoppedAt > now
+    ) {
+        return undefined;
+    }
+    return {
+        minerId,
+        relayStateId,
+        stoppedAt: value.stoppedAt,
+        relayOffConfirmed: true,
+    };
+}
