@@ -694,6 +694,39 @@ export class MinerAdapter extends utils.Adapter {
                     },
                     native: {},
                 });
+                // Simple read-only VIS states mirror the actual in-memory lock.
+                // They are not writable commands or persisted unlock permissions.
+                const diagnosticBase = `pvControl.miners.${this.getDeviceObjectId(settings)}`;
+                await this.extendObject(`${diagnosticBase}.restartLocked`, {
+                    type: 'state',
+                    common: {
+                        name: 'PV restart locked (read-only)',
+                        type: 'boolean',
+                        role: 'indicator',
+                        read: true,
+                        write: false,
+                    },
+                    native: {},
+                });
+                await this.extendObject(`${diagnosticBase}.safetyReason`, {
+                    type: 'state',
+                    common: {
+                        name: 'PV restart safety reason (read-only)',
+                        type: 'string',
+                        role: 'text',
+                        read: true,
+                        write: false,
+                    },
+                    native: {},
+                });
+                await this.setState(`${diagnosticBase}.restartLocked`, {
+                    val: this.pvRelayOffMiners.has(settings.settings.id),
+                    ack: true,
+                });
+                await this.setState(`${diagnosticBase}.safetyReason`, {
+                    val: 'adapter_restart_requires_fresh_safety_validation',
+                    ack: true,
+                });
                 await this.setState(lockPath, {
                     val: JSON.stringify({
                         minerId: settings.settings.id,
