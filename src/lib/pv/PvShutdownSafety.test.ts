@@ -7,6 +7,7 @@ import {
     parsePvPersistedStop,
     isPvShutdownSafe,
     isPvRelayOffConfirmed,
+    isPvMinerCommandAllowed,
     PvShutdownConfirmation,
     PvRelayOffPowerConfirmation,
     type PvPersistedStop,
@@ -970,5 +971,64 @@ describe('PV relay OFF missing telemetry and restart lock diagnostics', () => {
                 maxAgeMs,
             }),
         ).to.equal(false);
+    });
+});
+
+describe('PV command lock after simulated adapter restart', () => {
+    const minerId = 'pv-miner-1';
+
+    it('blocks commands immediately after restoring a PV-configured miner', () => {
+        // Each simulated adapter instance starts with empty in-memory sets.
+        const safeStops = new Set<string>();
+        const restartLocked = new Set<string>();
+        restartLocked.add(minerId);
+        expect(isPvMinerCommandAllowed(minerId, safeStops, restartLocked, false)).to.equal(false);
+    });
+
+    it('does not unlock commands when persisted shutdown diagnostics are valid', () => {
+        const restartLocked = new Set([minerId]);
+        const record = {
+            minerId,
+            relayStateId: 'relay.command',
+            stoppedAt: 1_800_000_000_000,
+            relayOffConfirmed: true,
+        };
+        expect(
+            isPvStopRestorationConsistent({
+                storedRecord: record,
+                minerId,
+                relayStateId: 'relay.command',
+                relayOnValue: true,
+                relayValue: false,
+                relayTimestamp: record.stoppedAt + 1000,
+                power: 0,
+                powerTimestamp: record.stoppedAt + 1000,
+                now: record.stoppedAt + 2000,
+                maxAgeMs: 180_000,
+            }),
+        ).to.equal(true);
+        expect(isPvMinerCommandAllowed(minerId, new Set<string>(), restartLocked, false)).to.equal(false);
+    });
+
+    it('keeps the miner locked when relay or power diagnostics are missing', () => {
+        const restartLocked = new Set([minerId]);
+        expect(isPvMinerCommandAllowed(minerId, new Set<string>(), restartLocked, false)).to.equal(false);
+    });
+
+    it('blocks commands during safe stop and adapter shutdown', () => {
+        expect(isPvMinerCommandAllowed(minerId, new Set([minerId]), new Set<string>(), false)).to.equal(false);
+        expect(isPvMinerCommandAllowed(minerId, new Set<string>(), new Set<string>(), true)).to.equal(false);
+    });
+
+    it('does not allow an empty miner identifier', () => {
+        expect(isPvMinerCommandAllowed('', new Set<string>(), new Set<string>(), false)).to.equal(false);
+    });
+
+    it('simulates a new adapter instance restoring the lock after an unconfirmed relay OFF', () => {
+        const firstInstanceLock = new Set([minerId]);
+        expect(isPvMinerCommandAllowed(minerId, new Set<string>(), firstInstanceLock, false)).to.equal(false);
+        const restartedInstanceLock = new Set<string>();
+        restartedInstanceLock.add(minerId);
+        expect(isPvMinerCommandAllowed(minerId, new Set<string>(), restartedInstanceLock, false)).to.equal(false);
     });
 });
