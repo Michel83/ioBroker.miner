@@ -59,6 +59,20 @@ export class MinerManager {
     }
 
     /**
+     * Serialize a user-issued miner command and enforce the PV interlock inside the
+     * command queue. Safety-only operations can still use withExclusiveMiner.
+     */
+    public async withExclusiveMinerCommand<T>(
+        id: string,
+        operation: (miner: Miner<MinerSettings>) => Promise<T>,
+    ): Promise<T> {
+        return this.withExclusiveMiner(id, miner => {
+            this.assertCommandAllowed(id);
+            return operation(miner);
+        });
+    }
+
+    /**
      *
      * @param settings - the miner configuration to initialize
      */
