@@ -905,3 +905,75 @@ describe('PV relay OFF: three independent post-command power readings', () => {
         }
     });
 });
+
+
+describe('PV relay OFF missing telemetry and restart lock diagnostics', () => {
+    const requestedAt = 1_800_000_000_000;
+    const maxAgeMs = 180_000;
+
+    it('never confirms a relay shutdown when no new power measurements arrive', () => {
+        const confirmation = new PvRelayOffPowerConfirmation(requestedAt);
+        for (let elapsed = 5000; elapsed <= 600_000; elapsed += 5000) {
+            expect(
+                confirmation.update(0, requestedAt, true, requestedAt + elapsed, maxAgeMs),
+            ).to.equal(false);
+        }
+    });
+
+    it('does not turn one old near-zero reading into three confirmations', () => {
+        const confirmation = new PvRelayOffPowerConfirmation(requestedAt);
+        const powerTimestamp = requestedAt + 10_000;
+        for (let elapsed = 10_000; elapsed <= 600_000; elapsed += 5000) {
+            expect(
+                confirmation.update(0, powerTimestamp, true, requestedAt + elapsed, maxAgeMs),
+            ).to.equal(false);
+        }
+    });
+
+    it('does not confirm if relay feedback disappears after two near-zero readings', () => {
+        const confirmation = new PvRelayOffPowerConfirmation(requestedAt);
+        expect(confirmation.update(0, requestedAt + 10_000, true, requestedAt + 10_000, maxAgeMs)).to.equal(false);
+        expect(confirmation.update(0, requestedAt + 20_000, true, requestedAt + 20_000, maxAgeMs)).to.equal(false);
+        expect(confirmation.update(undefined, undefined, false, requestedAt + 30_000, maxAgeMs)).to.equal(false);
+        expect(confirmation.update(0, requestedAt + 40_000, true, requestedAt + 40_000, maxAgeMs)).to.equal(false);
+    });
+
+    it('does not trust a missing safe-stop record after adapter restart', () => {
+        expect(
+            isPvStopRestorationConsistent({
+                storedRecord: undefined,
+                minerId: 'miner-1',
+                relayStateId: 'relay.command',
+                relayOnValue: true,
+                relayValue: false,
+                relayTimestamp: requestedAt + 1000,
+                power: 0,
+                powerTimestamp: requestedAt + 1000,
+                now: requestedAt + 2000,
+                maxAgeMs,
+            }),
+        ).to.equal(false);
+    });
+
+    it('does not trust a stored safe-stop record if power feedback is missing', () => {
+        expect(
+            isPvStopRestorationConsistent({
+                storedRecord: {
+                    minerId: 'miner-1',
+                    relayStateId: 'relay.command',
+                    stoppedAt: requestedAt,
+                    relayOffConfirmed: true,
+                },
+                minerId: 'miner-1',
+                relayStateId: 'relay.command',
+                relayOnValue: true,
+                relayValue: false,
+                relayTimestamp: requestedAt + 1000,
+                power: undefined,
+                powerTimestamp: undefined,
+                now: requestedAt + 2000,
+                maxAgeMs,
+            }),
+        ).to.equal(false);
+    });
+});
