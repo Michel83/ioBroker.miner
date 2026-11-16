@@ -3,10 +3,12 @@ import {
     executePvStartup,
     isPvRestartAllowed,
     isPvStartReady,
+    isPvStopRestorationConsistent,
     parsePvPersistedStop,
     isPvShutdownSafe,
     PvShutdownConfirmation,
     type PvPersistedStop,
+    type PvStopRestoration,
     type PvRestartMeasurements,
     type PvStartReadiness,
     type PvShutdownMeasurements,
@@ -633,5 +635,46 @@ describe('PV persisted stop record validation', () => {
         expect(
             parsePvPersistedStop({ ...valid(), stoppedAt: Number.NaN }, 's19', 'sonoff.0.relay.POWER', now),
         ).to.equal(undefined);
+    });
+});
+
+describe('PV stop restoration diagnostics', () => {
+    const now = 1_800_000_000_000;
+    const valid = (): PvStopRestoration => ({
+        storedRecord: {
+            minerId: 's19',
+            relayStateId: 'relay.s19',
+            stoppedAt: now - 180_000,
+            relayOffConfirmed: true,
+        },
+        minerId: 's19',
+        relayStateId: 'relay.s19',
+        relayOnValue: true,
+        relayValue: false,
+        relayTimestamp: now,
+        power: 0,
+        powerTimestamp: now,
+        now,
+        maxAgeMs: 15_000,
+    });
+
+    it('recognizes matching stored stop and fresh OFF diagnostics', () => {
+        expect(isPvStopRestorationConsistent(valid())).to.equal(true);
+    });
+
+    it('rejects missing history and mismatched miner identity', () => {
+        expect(isPvStopRestorationConsistent({ ...valid(), storedRecord: undefined })).to.equal(false);
+        expect(isPvStopRestorationConsistent({ ...valid(), minerId: 's9' })).to.equal(false);
+    });
+
+    it('rejects relay ON and stale relay readings', () => {
+        expect(isPvStopRestorationConsistent({ ...valid(), relayValue: true })).to.equal(false);
+        expect(isPvStopRestorationConsistent({ ...valid(), relayTimestamp: now - 20_000 })).to.equal(false);
+    });
+
+    it('rejects missing, stale and nonzero power', () => {
+        expect(isPvStopRestorationConsistent({ ...valid(), power: undefined })).to.equal(false);
+        expect(isPvStopRestorationConsistent({ ...valid(), powerTimestamp: now - 20_000 })).to.equal(false);
+        expect(isPvStopRestorationConsistent({ ...valid(), power: 100 })).to.equal(false);
     });
 });
