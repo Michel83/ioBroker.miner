@@ -57,10 +57,16 @@ describe('MinerManager command coordination', () => {
         const waiting = new Promise<void>(resolve => {
             release = resolve;
         });
+        let markStarted!: () => void;
+        const started = new Promise<void>(resolve => {
+            markStarted = resolve;
+        });
         const held = manager.withExclusiveMiner('test', async () => {
             events.push('exclusive');
+            markStarted();
             await waiting;
         });
+        await started;
         const closing = manager.closeAll();
         expect(events).to.deep.equal(['exclusive']);
         release();
