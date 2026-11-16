@@ -22,6 +22,7 @@ import { asyncDynamicInterval, setTimerBackend, type AsyncIntervalReturnType } f
 import {
     PvShutdownConfirmation,
     PvRelayOffPowerConfirmation,
+    isPvMinerCommandAllowed,
     isPvRelayOffConfirmed,
     isPvShutdownSafe,
     isPvStopRestorationConsistent,
@@ -98,7 +99,7 @@ export class MinerAdapter extends utils.Adapter {
         this.on('unload', this.onUnload.bind(this));
 
         this.minerManager.setCommandGuard(
-            id => !this.pvSafeStops.has(id) && !this.pvRelayOffMiners.has(id) && !this.pvShuttingDown,
+            id => isPvMinerCommandAllowed(id, this.pvSafeStops, this.pvRelayOffMiners, this.pvShuttingDown),
         );
         this.deviceManagement = new MinerAdapterDeviceManagement(this);
     }
