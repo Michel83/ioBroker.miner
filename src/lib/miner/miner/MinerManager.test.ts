@@ -16,7 +16,7 @@ describe('MinerManager PV command interlock', () => {
             setCustomFeature: async () => { calls.push('custom'); return true; },
         } as unknown as ReturnType<MinerManager['getMiners']>[number];
         // Test-only miner: no hardware connections or network calls.
-        manager.getMiners = () => [miner];
+        (manager as unknown as { miners: typeof miner[] }).miners.push(miner);
         return { manager, calls };
     }
 
