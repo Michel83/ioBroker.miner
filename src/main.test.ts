@@ -231,6 +231,57 @@ describe('PV restart lock ignores persisted permission (no hardware)', () => {
     }
 });
 
+describe('PV restart lock persistent diagnostics (no hardware)', () => {
+    for (const minerId of ['s9', 's19']) {
+        it(`records a locked state for ${minerId} without releasing the command guard`, async () => {
+            const adapter = createTestAdapter();
+            const records = new Map<string, unknown>();
+            const internal = adapter as unknown as {
+                pvRelayOffMiners: Set<string>;
+                restorePvStopDiagnostics: () => Promise<void>;
+                extendObject: () => Promise<void>;
+            };
+            internal.restorePvStopDiagnostics = () => Promise.resolve();
+            internal.extendObject = () => Promise.resolve();
+            adapter.minerManager = {
+                init: () => Promise.reject(new Error('simulated miner offline')),
+                getMiners: () => [],
+            };
+            adapter.createDeviceStateObjects = () => Promise.resolve();
+            adapter.writeStaticInfoStates = () => Promise.resolve();
+            adapter.getStateAsync = () => Promise.resolve({ val: true });
+            adapter.setState = (id, state) => {
+                records.set(id, state.val);
+                return Promise.resolve();
+            };
+            (adapter as unknown as { setStateChangedAsync: () => Promise<void> }).setStateChangedAsync = () =>
+                Promise.resolve();
+            adapter.config.checkForUpdates = false;
+
+            await adapter.initDevice({
+                _id: `miner.0.miner.${minerId}`,
+                native: {
+                    category: 'miner',
+                    name: minerId,
+                    enabled: true,
+                    pvControl: { enabled: true },
+                    settings: { id: minerId, minerType: 'bos', host: 'localhost' },
+                },
+            } as unknown as ioBroker.DeviceObject);
+
+            expect(internal.pvRelayOffMiners.has(minerId)).to.equal(true);
+            const value = records.get(`pvControl.miners.${minerId}.restartLockDiagnostic`);
+            expect(value).to.be.a('string');
+            const diagnostic = JSON.parse(value as string) as Record<string, unknown>;
+            expect(diagnostic.minerId).to.equal(minerId);
+            expect(diagnostic.locked).to.equal(true);
+            expect(diagnostic.safetyStatus).to.equal('not_authorized');
+            expect(diagnostic.reason).to.equal('adapter_restart_requires_fresh_safety_validation');
+            expect(diagnostic.recordedAt).to.be.a('number');
+        });
+    }
+});
+
 describe('offline BOS update check after restart', () => {
     for (const enabled of [true, false]) {
         it(`uses persisted identity for an offline device (enabled=${enabled})`, async () => {
