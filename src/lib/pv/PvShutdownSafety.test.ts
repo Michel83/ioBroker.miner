@@ -1,4 +1,4 @@
-import { expect } from 'chai';
+import { type PvRestartUnlockCandidate, expect } from 'chai';
 import {
     executePvStartup,
     isPvRestartAllowed,
@@ -1159,7 +1159,7 @@ describe('PV restart unlock candidate remains read-only', () => {
     const now = 1_800_000_000_000;
     const relayPoweredOnAt = now - 120_000;
     const lockedMiners = new Set(['s9', 's19']);
-    const candidate = (minerId: string) => ({
+    const candidate = (minerId: string): PvRestartUnlockCandidate => ({
         minerId,
         lockedMiners,
         activeSafeStops: new Set<string>(),
@@ -1251,7 +1251,7 @@ describe('PV unlock transaction simulation (test-only, no adapter wiring)', () =
     const now = 1_800_000_000_000;
     const poweredOnAt = now - 120_000;
     const locks = new Set(['s9', 's19']);
-    const evidence = (minerId: string) => ({
+    const evidence = (minerId: string): PvRestartUnlockCandidate => ({
         minerId,
         lockedMiners: locks,
         activeSafeStops: new Set<string>(),
@@ -1285,7 +1285,7 @@ describe('PV unlock transaction simulation (test-only, no adapter wiring)', () =
     });
 
     // Test-local simulation only. Production lock sets are never passed here.
-    const simulateAtomicUnlock = (values: ReturnType<typeof evidence>): boolean => {
+    const simulateAtomicUnlock = (values: PvRestartUnlockCandidate): boolean => {
         if (!isPvRestartUnlockCandidate(values)) {
             return false;
         }
