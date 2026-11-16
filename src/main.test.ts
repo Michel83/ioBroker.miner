@@ -410,7 +410,7 @@ describe('custom features', () => {
         adapter.minerManager = {
             getMiner: id => (id === 'dev' ? { setCustomFeature } : undefined),
             hasMiner: id => id === 'dev',
-            withExclusiveMiner: (id, operation) => {
+            withExclusiveMinerCommand: (id, operation) => {
                 if (id !== 'dev') {
                     throw new Error('Miner not found');
                 }
