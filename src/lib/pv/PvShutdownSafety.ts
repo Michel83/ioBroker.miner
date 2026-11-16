@@ -169,6 +169,7 @@ export function isPvRestartAllowed(values: PvRestartMeasurements): boolean {
         values.batteryPower === undefined ||
         !Number.isFinite(values.gridPower) ||
         !Number.isFinite(values.batteryPower) ||
+        values.batteryPower > 0 ||
         !Number.isFinite(values.reserveWatts) ||
         !Number.isFinite(values.minimumStartWatts) ||
         values.reserveWatts < 0 ||
