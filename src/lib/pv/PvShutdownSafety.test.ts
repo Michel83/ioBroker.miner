@@ -642,6 +642,68 @@ describe('PV startup command ordering', () => {
     });
 });
 
+describe('PV startup lock remains fail-closed', () => {
+    const now = 1_800_000_000_000;
+    const ready = (): PvStartReadiness => ({
+        relayOn: true,
+        relayTimestamp: now,
+        relayEnabledAt: now - 120_000,
+        minerReachable: true,
+        minerSeenAt: now,
+        now,
+        maxAgeMs: 15_000,
+        startupDelayMs: 120_000,
+    });
+
+    it('keeps both miner locks after a successful simulated startup sequence', async () => {
+        const locks = new Set(['s9', 's19']);
+        const calls: string[] = [];
+        await executePvStartup({
+            mayPowerOn: () => Promise.resolve(true),
+            powerOnRelay: () => {
+                calls.push('relay-on');
+                return Promise.resolve();
+            },
+            awaitReadiness: () => Promise.resolve(ready()),
+            mayStartMining: () => Promise.resolve(true),
+            startMining: () => {
+                calls.push('simulated-start');
+                return Promise.resolve();
+            },
+        });
+        expect(calls).to.deep.equal(['relay-on', 'simulated-start']);
+        for (const id of locks) {
+            expect(isPvMinerCommandAllowed(id, new Set<string>(), locks, false)).to.equal(false);
+        }
+    });
+
+    it('does not start with stale relay feedback and retains the restart lock', async () => {
+        const locks = new Set(['s19']);
+        const calls: string[] = [];
+        let rejected = false;
+        try {
+            await executePvStartup({
+                mayPowerOn: () => Promise.resolve(true),
+                powerOnRelay: () => {
+                    calls.push('relay-on');
+                    return Promise.resolve();
+                },
+                awaitReadiness: () => Promise.resolve({ ...ready(), relayTimestamp: now - 20_000 }),
+                mayStartMining: () => Promise.resolve(true),
+                startMining: () => {
+                    calls.push('simulated-start');
+                    return Promise.resolve();
+                },
+            });
+        } catch {
+            rejected = true;
+        }
+        expect(rejected).to.equal(true);
+        expect(calls).to.deep.equal(['relay-on']);
+        expect(isPvMinerCommandAllowed('s19', new Set<string>(), locks, false)).to.equal(false);
+    });
+});
+
 describe('PV persisted stop record validation', () => {
     const now = 1_800_000_000_000;
     const valid = (): PvPersistedStop => ({
