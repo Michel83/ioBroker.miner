@@ -6,6 +6,7 @@ import {
     isPvStopRestorationConsistent,
     parsePvPersistedStop,
     isPvShutdownSafe,
+    isPvRelayOffConfirmed,
     PvShutdownConfirmation,
     type PvPersistedStop,
     type PvStopRestoration,
@@ -731,5 +732,32 @@ describe('PV final relay-off safety regression', () => {
         ).to.equal(false);
         expect(confirmation.update(reading(start + 15_000), start + 15_000, maxAgeMs, pausedAt)).to.equal(false);
         expect(confirmation.update(reading(start + 30_000), start + 30_000, maxAgeMs, pausedAt)).to.equal(false);
+    });
+});
+
+describe('PV relay OFF acknowledgement', () => {
+    const requestedAt = 1_800_000_000_000;
+    const now = requestedAt + 5000;
+    const confirmed = (value: unknown, timestamp: number | undefined, ack: boolean | undefined): boolean =>
+        isPvRelayOffConfirmed(value, timestamp, ack, true, requestedAt, now, 15_000);
+
+    it('accepts a fresh acknowledged OFF state after the request', () => {
+        expect(confirmed(false, requestedAt + 1000, true)).to.equal(true);
+    });
+
+    it('rejects ON, unacknowledged and missing relay feedback', () => {
+        expect(confirmed(true, requestedAt + 1000, true)).to.equal(false);
+        expect(confirmed(false, requestedAt + 1000, false)).to.equal(false);
+        expect(confirmed(undefined, requestedAt + 1000, true)).to.equal(false);
+    });
+
+    it('rejects feedback predating the OFF request', () => {
+        expect(confirmed(false, requestedAt, true)).to.equal(false);
+        expect(confirmed(false, requestedAt - 1000, true)).to.equal(false);
+    });
+
+    it('rejects future and stale feedback', () => {
+        expect(confirmed(false, now + 1, true)).to.equal(false);
+        expect(isPvRelayOffConfirmed(false, requestedAt + 1000, true, true, requestedAt, now + 20_000, 15_000)).to.equal(false);
     });
 });
