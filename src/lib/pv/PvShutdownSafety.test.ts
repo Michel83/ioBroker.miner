@@ -1,4 +1,4 @@
-import { type PvRestartUnlockCandidate, expect } from 'chai';
+import { expect } from 'chai';
 import {
     executePvStartup,
     isPvRestartAllowed,
@@ -11,6 +11,7 @@ import {
     isPvMinerCommandAllowed,
     PvShutdownConfirmation,
     PvRelayOffPowerConfirmation,
+    type PvRestartUnlockCandidate,
     type PvPersistedStop,
     type PvStopRestoration,
     type PvRestartMeasurements,
