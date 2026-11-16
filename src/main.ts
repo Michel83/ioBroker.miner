@@ -1457,7 +1457,7 @@ export class MinerAdapter extends utils.Adapter {
             throw new Error(`PV safe stop only implemented for BOSMiner: ${settings.name}`);
         }
         const feedbackId = pv.relayFeedbackStateId || pv.relayStateId;
-        const powerSampleGapMs = Math.min(300, Math.max(15, Number(pv.powerSampleMaxGap) || 15)) * 1000;
+        const powerSampleGapMs = Math.min(180, Math.max(15, Number(pv.powerSampleMaxGap) || 15)) * 1000;
         // Three distinct samples can require two full telemetry intervals after the first update.
         const confirmationTimeoutMs = Math.max(
             90_000,
