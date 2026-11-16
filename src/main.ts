@@ -28,6 +28,7 @@ import {
     isPvStopRestorationConsistent,
 } from './lib/pv/PvShutdownSafety';
 import { calculatePvV243 } from './lib/pv/PvRegulationV243';
+import { confirmedPvRelayOn } from './lib/pv/PvRelayFeedbackDiagnostic';
 import { evaluatePvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
 import type { PvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
 import type { PvMinerKindV243 } from './lib/pv/PvTargetRegulationV243';
@@ -1440,6 +1441,34 @@ export class MinerAdapter extends utils.Adapter {
         this.pvMonitorBusy = true;
         try {
             const ageMs = Math.max(10, Number(this.config.pvMaxDataAge) || 180) * 1000;
+            // Read-only VIS feedback. Every cycle resets missing/stale/unacknowledged
+            // relay observations to null; never infer relay state from commands.
+            for (const device of await this.getDevicesAsync()) {
+                const settings = device.native as IOBrokerDeviceSettings;
+                if (!isMiner(settings) || settings.pvControl?.enabled !== true || !settings.settings.id) {
+                    continue;
+                }
+                const base = `pvControl.miners.${this.getDeviceObjectId(settings)}`;
+                const pv = settings.pvControl;
+                let relayOn: boolean | null = null;
+                const feedbackId = pv.relayFeedbackStateId || pv.relayStateId;
+                if (feedbackId && typeof pv.relayOnValue === 'boolean') {
+                    try {
+                        const state = await this.getForeignStateAsync(feedbackId);
+                        relayOn = confirmedPvRelayOn(
+                            state?.val,
+                            state?.ack,
+                            state?.ts,
+                            pv.relayOnValue,
+                            Date.now(),
+                            ageMs,
+                        );
+                    } catch {
+                        // Unavailable feedback is unknown, never confirmed OFF.
+                    }
+                }
+                await this.setState(`${base}.relayOn`, { val: relayOn, ack: true });
+            }
             const grid = await this.readFreshPvValue(this.config.pvGridPowerId || '', ageMs);
             const battery = await this.readFreshPvValue(this.config.pvBatteryPowerId || '', ageMs);
             const valid = grid !== undefined && battery !== undefined;
