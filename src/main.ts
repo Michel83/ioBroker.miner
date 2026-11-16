@@ -1308,7 +1308,9 @@ export class MinerAdapter extends utils.Adapter {
             await this.setState('pvControl.v243Available', { val: v243?.availableWatts ?? null, ack: true });
             await this.setState('pvControl.v243EffectiveGrid', { val: v243?.effectiveGridWatts ?? null, ack: true });
             await this.setState('pvControl.v243Status', {
-                val: v243 ? 'Read-only V2.43 calculation valid; commands locked' : 'Missing, stale or invalid V2.43 input; commands locked',
+                val: v243
+                    ? 'Read-only V2.43 calculation valid; commands locked'
+                    : 'Missing, stale or invalid V2.43 input; commands locked',
                 ack: true,
             });
             const status = !valid

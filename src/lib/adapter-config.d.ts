@@ -1,5 +1,4 @@
-
- // This file extends the AdapterConfig type from "@types/iobroker"
+// This file extends the AdapterConfig type from "@types/iobroker"
 
 declare global {
     namespace ioBroker {
