@@ -3,6 +3,7 @@ import {
     executePvStartup,
     isPvRestartAllowed,
     isPvStartReady,
+    parsePvPersistedStop,
     isPvShutdownSafe,
     PvShutdownConfirmation,
     type PvRestartMeasurements,
@@ -593,5 +594,35 @@ describe('PV startup command ordering', () => {
             expect(String(error)).to.contain('conditions changed');
         }
         expect(calls).to.deep.equal(['relay-on']);
+    });
+});
+
+describe('PV persisted stop record validation', () => {
+    const now = 1_800_000_000_000;
+    const valid = () => ({
+        minerId: 's19',
+        relayStateId: 'sonoff.0.relay.POWER',
+        stoppedAt: now - 180_000,
+        relayOffConfirmed: true,
+    });
+
+    it('accepts a matching confirmed record', () => {
+        expect(parsePvPersistedStop(valid(), 's19', 'sonoff.0.relay.POWER', now)).to.deep.equal(valid());
+    });
+
+    it('rejects missing and unconfirmed records', () => {
+        expect(parsePvPersistedStop(undefined, 's19', 'sonoff.0.relay.POWER', now)).to.equal(undefined);
+        expect(parsePvPersistedStop({ ...valid(), relayOffConfirmed: false }, 's19', 'sonoff.0.relay.POWER', now)).to.equal(undefined);
+    });
+
+    it('rejects records belonging to another miner or relay', () => {
+        expect(parsePvPersistedStop(valid(), 's9', 'sonoff.0.relay.POWER', now)).to.equal(undefined);
+        expect(parsePvPersistedStop(valid(), 's19', 'sonoff.0.other.POWER', now)).to.equal(undefined);
+    });
+
+    it('rejects future, missing and invalid timestamps', () => {
+        expect(parsePvPersistedStop({ ...valid(), stoppedAt: now + 1 }, 's19', 'sonoff.0.relay.POWER', now)).to.equal(undefined);
+        expect(parsePvPersistedStop({ ...valid(), stoppedAt: null }, 's19', 'sonoff.0.relay.POWER', now)).to.equal(undefined);
+        expect(parsePvPersistedStop({ ...valid(), stoppedAt: Number.NaN }, 's19', 'sonoff.0.relay.POWER', now)).to.equal(undefined);
     });
 });
