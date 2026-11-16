@@ -21,6 +21,7 @@ import type { MinerStats } from './lib/miner/model/MinerStats';
 import { asyncDynamicInterval, setTimerBackend, type AsyncIntervalReturnType } from './lib/utils/delay';
 import {
     PvShutdownConfirmation,
+    PvRelayOffPowerConfirmation,
     isPvRelayOffConfirmed,
     isPvShutdownSafe,
     isPvStopRestorationConsistent,
@@ -1562,8 +1563,7 @@ export class MinerAdapter extends utils.Adapter {
                         this.pvRelayOffMiners.add(id);
                         const relayOffRequestedAt = Date.now();
                         await this.setForeignStateAsync(pv.relayStateId, !pv.relayOnValue);
-                        let lastPowerTimestamp = relayOffRequestedAt;
-                        let zeroPowerSamples = 0;
+                        const powerConfirmation = new PvRelayOffPowerConfirmation(relayOffRequestedAt);
                         const confirmationDeadline = Date.now() + confirmationTimeoutMs;
                         while (Date.now() < confirmationDeadline && !this.pvShuttingDown) {
                             await this.delay(5_000);
@@ -1572,26 +1572,24 @@ export class MinerAdapter extends utils.Adapter {
                                 this.getForeignStateAsync(feedbackId),
                             ]);
                             const feedbackNow = Date.now();
+                            const relayConfirmedOff = isPvRelayOffConfirmed(
+                                relayFeedback?.val,
+                                relayFeedback?.ts,
+                                relayFeedback?.ack,
+                                pv.relayOnValue,
+                                relayOffRequestedAt,
+                                feedbackNow,
+                                ageMs,
+                            );
                             if (
-                                !isPvRelayOffConfirmed(
-                                    relayFeedback?.val,
-                                    relayFeedback?.ts,
-                                    relayFeedback?.ack,
-                                    pv.relayOnValue,
-                                    relayOffRequestedAt,
+                                powerConfirmation.update(
+                                    sample?.value,
+                                    sample?.timestamp,
+                                    relayConfirmedOff,
                                     feedbackNow,
                                     ageMs,
                                 )
                             ) {
-                                zeroPowerSamples = 0;
-                                continue;
-                            }
-                            if (!sample || sample.timestamp <= lastPowerTimestamp) {
-                                continue;
-                            }
-                            lastPowerTimestamp = sample.timestamp;
-                            zeroPowerSamples = sample.value >= 0 && sample.value <= 5 ? zeroPowerSamples + 1 : 0;
-                            if (zeroPowerSamples >= 3) {
                                 const finalFeedback = await this.getForeignStateAsync(feedbackId);
                                 if (
                                     !isPvRelayOffConfirmed(
@@ -1604,7 +1602,7 @@ export class MinerAdapter extends utils.Adapter {
                                         ageMs,
                                     )
                                 ) {
-                                    zeroPowerSamples = 0;
+                                    powerConfirmation.reset();
                                     continue;
                                 }
                                 const record = {
