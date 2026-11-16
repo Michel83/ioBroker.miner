@@ -49,6 +49,7 @@ describe('PV restart unlock and miner command queue (simulation only)', () => {
             },
             readiness: {
                 relayOn: true,
+                relayAck: true,
                 relayTimestamp: now,
                 relayEnabledAt: poweredOnAt,
                 minerReachable: true,
