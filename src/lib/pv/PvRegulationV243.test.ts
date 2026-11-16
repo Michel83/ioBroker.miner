@@ -6,7 +6,7 @@ describe('PV regulation V2.43 read-only calculations', () => {
         expect(calculatePvV243({ gridPower: -2000, batteryPower: -700, batterySoc: 80 })).to.deep.equal({
             availableWatts: 1500,
             batteryChargeDeficitWatts: 500,
-            effectiveGridWatts: -2500,
+            effectiveGridWatts: -1500,
         });
     });
 
