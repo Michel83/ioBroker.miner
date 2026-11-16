@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import { isPvShutdownSafe, PvShutdownConfirmation, type PvShutdownMeasurements } from './PvShutdownSafety';
+import { isPvRestartAllowed, isPvShutdownSafe, PvShutdownConfirmation, type PvRestartMeasurements, type PvShutdownMeasurements } from './PvShutdownSafety';
 
 describe('PV shutdown safety', () => {
     const now = 1_800_000_000_000;
@@ -394,5 +394,48 @@ describe('PV shutdown independent sensor gaps', () => {
 
             expect(check.update(values, now, 180_000, pausedAt)).to.equal(false);
         }
+    });
+});
+
+describe('PV automatic restart eligibility', () => {
+    const now = 1_800_000_000_000;
+    const valid = (): PvRestartMeasurements => ({
+        enabled: true,
+        relayConfirmedOff: true,
+        gridPower: -2500,
+        batteryPower: -200,
+        gridTimestamp: now,
+        batteryTimestamp: now,
+        now,
+        maxAgeMs: 15_000,
+        reserveWatts: 200,
+        minimumStartWatts: 1800,
+        lastStoppedAt: now - 180_000,
+        restartDelayMs: 180_000,
+    });
+
+    it('accepts confirmed relay-off with sufficient fresh export', () => {
+        expect(isPvRestartAllowed(valid())).to.equal(true);
+    });
+
+    it('rejects disabled PV automation and unknown relay state', () => {
+        expect(isPvRestartAllowed({ ...valid(), enabled: false })).to.equal(false);
+        expect(isPvRestartAllowed({ ...valid(), relayConfirmedOff: false })).to.equal(false);
+    });
+
+    it('rejects stale or missing measurements', () => {
+        expect(isPvRestartAllowed({ ...valid(), gridTimestamp: now - 20_000 })).to.equal(false);
+        expect(isPvRestartAllowed({ ...valid(), batteryTimestamp: undefined })).to.equal(false);
+        expect(isPvRestartAllowed({ ...valid(), gridPower: undefined })).to.equal(false);
+    });
+
+    it('rejects insufficient export or battery discharge', () => {
+        expect(isPvRestartAllowed({ ...valid(), gridPower: -1900 })).to.equal(false);
+        expect(isPvRestartAllowed({ ...valid(), batteryPower: 800 })).to.equal(false);
+    });
+
+    it('requires a known completed stop and elapsed restart delay', () => {
+        expect(isPvRestartAllowed({ ...valid(), lastStoppedAt: undefined })).to.equal(false);
+        expect(isPvRestartAllowed({ ...valid(), lastStoppedAt: now - 179_999 })).to.equal(false);
     });
 });
