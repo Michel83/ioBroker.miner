@@ -699,7 +699,9 @@ describe('PV final relay-off safety regression', () => {
     it('rejects missing or stale power immediately before relay-off', () => {
         const now = start + 30_000;
         expect(isPvShutdownSafe({ ...reading(now), power: undefined }, now, maxAgeMs, pausedAt)).to.equal(false);
-        expect(isPvShutdownSafe({ ...reading(now), powerTimestamp: now - maxAgeMs - 1 }, now, maxAgeMs, pausedAt)).to.equal(false);
+        expect(
+            isPvShutdownSafe({ ...reading(now), powerTimestamp: now - maxAgeMs - 1 }, now, maxAgeMs, pausedAt),
+        ).to.equal(false);
     });
 
     it('resets 30-second confirmation after a missing hashrate sample', () => {
@@ -710,7 +712,9 @@ describe('PV final relay-off safety regression', () => {
             expect(confirmation.update(reading(time), time, maxAgeMs, pausedAt)).to.equal(false);
         }
         const interruptedAt = start + 20_000;
-        expect(confirmation.update({ ...reading(interruptedAt), hashrate: undefined }, interruptedAt, maxAgeMs, pausedAt)).to.equal(false);
+        expect(
+            confirmation.update({ ...reading(interruptedAt), hashrate: undefined }, interruptedAt, maxAgeMs, pausedAt),
+        ).to.equal(false);
         for (let seconds = 25; seconds <= 45; seconds += 5) {
             const time = start + seconds * 1000;
             expect(confirmation.update(reading(time), time, maxAgeMs, pausedAt)).to.equal(false);
@@ -722,7 +726,9 @@ describe('PV final relay-off safety regression', () => {
         const confirmation = new PvShutdownConfirmation();
         confirmation.update(reading(start), start, maxAgeMs, pausedAt);
         const interruptedAt = start + 10_000;
-        expect(confirmation.update({ ...reading(interruptedAt), hashrate: 50 }, interruptedAt, maxAgeMs, pausedAt)).to.equal(false);
+        expect(
+            confirmation.update({ ...reading(interruptedAt), hashrate: 50 }, interruptedAt, maxAgeMs, pausedAt),
+        ).to.equal(false);
         expect(confirmation.update(reading(start + 15_000), start + 15_000, maxAgeMs, pausedAt)).to.equal(false);
         expect(confirmation.update(reading(start + 30_000), start + 30_000, maxAgeMs, pausedAt)).to.equal(false);
     });
