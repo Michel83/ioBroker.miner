@@ -903,6 +903,7 @@ describe('PV diagnostics after adapter restart and interrupted monitoring (no ha
             createDeviceStateObjects: () => Promise<void>;
             writeStaticInfoStates: () => Promise<void>;
             extendObject: () => Promise<void>;
+            getStateAsync: (id: string) => Promise<{ val: unknown } | null>;
             setState: (id: string, state: { val: unknown }) => Promise<void>;
             setStateChangedAsync: () => Promise<void>;
             initDevice: (device: ioBroker.DeviceObject) => Promise<void>;
@@ -917,6 +918,7 @@ describe('PV diagnostics after adapter restart and interrupted monitoring (no ha
         adapter.createDeviceStateObjects = async () => {};
         adapter.writeStaticInfoStates = async () => {};
         adapter.extendObject = async () => {};
+        adapter.getStateAsync = async () => null;
         adapter.setStateChangedAsync = async () => {};
         adapter.setState = async (id, state) => { writes.set(id, state.val); };
         for (const id of ['s9', 's19']) {
