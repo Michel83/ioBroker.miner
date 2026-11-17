@@ -30,12 +30,26 @@ describe('PV S9 shutdown with delayed Sonoff telemetry (simulation only)', () =>
         }
     });
 
-    it('accepts S9 stop evidence only after three distinct post-pause updates over 30 seconds', () => {
+    it('accepts S9 stop evidence after three distinct post-pause updates over 30 seconds', () => {
         const check = new PvShutdownConfirmation();
         const delayed = start + 130_000;
         expect(check.update(sample(delayed), delayed, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(false);
         expect(check.update(sample(delayed + 15_000), delayed + 15_000, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(false);
-        expect(check.update(sample(delayed + 30_000), delayed + 30_000, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(false);
+        expect(check.update(sample(delayed + 30_000), delayed + 30_000, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(true);
+    });
+
+
+    it('fails closed if S9 power updates arrive 130 seconds apart while the current confirmation window is 10 seconds', () => {
+        const check = new PvShutdownConfirmation();
+        for (let seconds = 130; seconds <= 390; seconds += 130) {
+            const at = start + seconds * 1000;
+            expect(check.update(sample(at), at, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(false);
+        }
+    });
+
+    it('does not accept a final power sample older than the configured 15-second confirmation gap', () => {
+        const now = start + 160_000;
+        expect(isPvShutdownSafe(sample(now, now - 130_000), now, 15_000, pausedAt)).to.equal(false);
     });
 
     it('rejects a final S9 relay-off check if power becomes high again', () => {
