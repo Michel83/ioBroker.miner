@@ -33,9 +33,9 @@ describe('PV S9 shutdown with delayed Sonoff telemetry (simulation only)', () =>
     it('accepts S9 stop evidence after three distinct post-pause updates over 30 seconds', () => {
         const check = new PvShutdownConfirmation();
         const delayed = start + 130_000;
-        expect(check.update(sample(delayed), delayed, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(false);
-        expect(check.update(sample(delayed + 15_000), delayed + 15_000, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(false);
-        expect(check.update(sample(delayed + 30_000), delayed + 30_000, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(true);
+        expect(check.update(sample(delayed), delayed, ageMs, pausedAt, 30_000, 20_000, 180_000)).to.equal(false);
+        expect(check.update(sample(delayed + 15_000), delayed + 15_000, ageMs, pausedAt, 30_000, 20_000, 180_000)).to.equal(false);
+        expect(check.update(sample(delayed + 30_000), delayed + 30_000, ageMs, pausedAt, 30_000, 20_000, 180_000)).to.equal(true);
     });
 
 
