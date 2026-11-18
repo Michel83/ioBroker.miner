@@ -76,7 +76,7 @@ describe('PV S9 two-phase shutdown sequence (fake hardware)', () => {
             const now = offAt + elapsed;
             const reading = Math.floor(elapsed / gapMs);
             const powerAt = reading === 0 ? offAt - 1 : offAt + reading * gapMs;
-            const relayAt = options.staleRelayFeedback ? offAt : offAt + 5_000;
+            const relayAt = options.staleRelayFeedback ? offAt : now;
             const relayOk = isPvRelayOffConfirmed(
                 false, relayAt, !options.relayFeedbackLostAfterOff, true, offAt, now, ageMs,
             );
