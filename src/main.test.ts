@@ -1114,6 +1114,121 @@ describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
         }
     });
 
+    /**
+     * Drives the real adapter method with virtual time. The mock only supplies
+     * sensor/relay IO; it does not reproduce the shutdown decision logic.
+     */
+    async function runFailureScenario(
+        scenario: 'relay-stays-on' | 'high-power-after-off' | 'miner-communication-loss' |
+            'adapter-unload' | 'pre-off-timeout',
+    ): Promise<{ commands: string[]; error: string; locked: boolean; records: number }> {
+        const { adapter, settings, commands } = setup();
+        const harness = adapter as StopHarness & {
+            delay: (ms: number) => Promise<void>;
+            pvShuttingDown: boolean;
+            pvRelayOffMiners: Set<string>;
+            pvSafeStops: Set<string>;
+            setState: (id: string, state: { val: string }) => Promise<void>;
+            extendObject: (id: string, object: unknown) => Promise<void>;
+        };
+        const originalNow = Date.now;
+        let clock = 1_800_000_000_000;
+        const started = clock;
+        let offAt: number | undefined;
+        let records = 0;
+        try {
+            Date.now = () => clock;
+            harness.delay = async ms => {
+                clock += ms;
+                if (scenario === 'adapter-unload' && clock - started >= 5_000) {
+                    harness.pvShuttingDown = true;
+                }
+            };
+            harness.getStateAsync = async id => {
+                if (scenario === 'miner-communication-loss' && clock - started >= 5_000) {
+                    throw new Error('S9 communication lost');
+                }
+                return { val: id.endsWith('lastSeen') ? clock : 0, ts: clock };
+            };
+            harness.readFreshPvMeasurement = async () => {
+                const origin = offAt ?? started;
+                const elapsed = clock - origin;
+                const index = Math.floor(elapsed / 130_000);
+                const timestamp = index === 0 ? origin - 1 : origin + index * 130_000;
+                return {
+                    value: scenario === 'pre-off-timeout' ? 900 :
+                        offAt !== undefined && scenario === 'high-power-after-off' ? 900 :
+                            offAt === undefined ? 50 : 0,
+                    timestamp,
+                };
+            };
+            harness.getForeignStateAsync = async () => ({
+                val: offAt === undefined || scenario === 'relay-stays-on',
+                ts: clock,
+                ack: true,
+            });
+            harness.setForeignStateAsync = async (_id, value) => {
+                expect(value).to.equal(false);
+                commands.push('relay.off');
+                offAt = clock;
+            };
+            harness.setState = async () => { records++; };
+            harness.extendObject = async () => {};
+
+            let error = '';
+            try {
+                await harness.safeStopPvMiner(settings);
+            } catch (caught) {
+                error = String(caught);
+            }
+            return {
+                commands,
+                error,
+                locked: harness.pvRelayOffMiners.has('S9'),
+                records,
+            };
+        } finally {
+            Date.now = originalNow;
+        }
+    }
+
+    it('keeps S9 locked if Sonoff still reports ON after relay OFF request', async () => {
+        const result = await runFailureScenario('relay-stays-on');
+        expect(result.commands).to.deep.equal(['pause', 'relay.off']);
+        expect(result.error).to.include('three near-zero power samples were not confirmed');
+        expect(result.locked).to.equal(true);
+        expect(result.records).to.equal(0);
+    });
+
+    it('keeps S9 locked if power rises after relay OFF request', async () => {
+        const result = await runFailureScenario('high-power-after-off');
+        expect(result.commands).to.deep.equal(['pause', 'relay.off']);
+        expect(result.error).to.include('three near-zero power samples were not confirmed');
+        expect(result.locked).to.equal(true);
+        expect(result.records).to.equal(0);
+    });
+
+    it('does not switch S9 relay OFF after miner communication fails', async () => {
+        const result = await runFailureScenario('miner-communication-loss');
+        expect(result.commands).to.deep.equal(['pause']);
+        expect(result.error).to.include('S9 communication lost');
+        expect(result.records).to.equal(0);
+    });
+
+    it('does not switch S9 relay OFF when adapter unload begins', async () => {
+        const result = await runFailureScenario('adapter-unload');
+        expect(result.commands).to.deep.equal(['pause']);
+        expect(result.error).to.include('PV automation disabled during safe stop');
+        expect(result.records).to.equal(0);
+    });
+
+    it('times out safely without relay OFF if S9 never reaches low power', async () => {
+        const result = await runFailureScenario('pre-off-timeout');
+        expect(result.commands).to.deep.equal(['pause']);
+        expect(result.error).to.include('PV safe stop timed out');
+        expect(result.records).to.equal(0);
+    });
+
     it('never issues relay OFF when the miner pause command fails', async () => {
         const { adapter, settings, commands } = setup();
         adapter.minerManager.withExclusiveMiner = async (_id, fn) => fn({
