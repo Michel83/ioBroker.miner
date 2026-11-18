@@ -1004,6 +1004,65 @@ describe('PV diagnostics after adapter restart and interrupted monitoring (no ha
     });
 });
 
+describe('PV S9/S19 real MinerManager command interlock (mocked miners)', () => {
+    it('blocks start, profile and power commands for both locked miners independently', async () => {
+        const adapter = createTestAdapter() as unknown as {
+            pvRelayOffMiners: Set<string>;
+            minerManager: {
+                getMiners: () => Array<{ settings: { id: string } }>;
+                startMiner: (id: string) => Promise<void>;
+                setProfile: (id: string, profile: string) => Promise<void>;
+                setPowerTarget: (id: string, watts: number) => Promise<void>;
+            };
+        };
+        const calls: string[] = [];
+        const miners = adapter.minerManager.getMiners();
+        for (const id of ['s9', 's19', 'other']) {
+            miners.push({
+                settings: { id },
+                start: async () => { calls.push(`${id}.start`); },
+                setProfile: async () => { calls.push(`${id}.profile`); },
+                setPowerTarget: async () => { calls.push(`${id}.power`); },
+            } as unknown as { settings: { id: string } });
+        }
+        // Install fake miners in the real manager's private collection.
+        const manager = adapter.minerManager as unknown as {
+            miners: typeof miners;
+        };
+        manager.miners.push(...miners);
+
+        adapter.pvRelayOffMiners.add('s9');
+        adapter.pvRelayOffMiners.add('s19');
+        for (const id of ['s9', 's19']) {
+            for (const operation of [
+                () => adapter.minerManager.startMiner(id),
+                () => adapter.minerManager.setProfile(id, 'normal'),
+                () => adapter.minerManager.setPowerTarget(id, 800),
+            ]) {
+                let rejected = false;
+                try {
+                    await operation();
+                } catch (error) {
+                    rejected = true;
+                    expect(String(error)).to.include('command blocked by PV safe stop');
+                }
+                expect(rejected, `${id} command must be blocked`).to.equal(true);
+            }
+        }
+        expect(calls).to.deep.equal([]);
+
+        // A separate miner is unaffected by the two locked miners.
+        await adapter.minerManager.startMiner('other');
+        await adapter.minerManager.setProfile('other', 'normal');
+        await adapter.minerManager.setPowerTarget('other', 800);
+        expect(calls).to.deep.equal(['other.start', 'other.profile', 'other.power']);
+
+        // Recovering S19 feedback alone must not remove either lock.
+        expect(adapter.pvRelayOffMiners.has('s9')).to.equal(true);
+        expect(adapter.pvRelayOffMiners.has('s19')).to.equal(true);
+    });
+});
+
 /**
  * Direct tests of the actual private safeStopPvMiner method using a controller-free
  * adapter. No real miner, Sonoff relay, or ioBroker instance is contacted.
