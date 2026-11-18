@@ -1,6 +1,13 @@
 /**
  * Read-only relay feedback for VIS. Unknown feedback must never be displayed
  * as a confirmed ON/OFF state or used to authorize commands.
+ *
+ * @param value
+ * @param acknowledged
+ * @param timestamp
+ * @param relayOnValue
+ * @param now
+ * @param maxAgeMs
  */
 export function confirmedPvRelayOn(
     value: unknown,

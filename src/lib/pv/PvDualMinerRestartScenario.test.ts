@@ -27,18 +27,10 @@ describe('PV dual-miner restart scenarios (simulation only)', () => {
         };
         return { measurements, minimumStartWatts, locked: true };
     };
-    const evaluate = (
-        miner: ReturnType<typeof makeMiner>,
-        relayAck: boolean,
-        gridPower = -4500,
-        batteryPower = 0,
-    ) => {
+    const evaluate = (miner: ReturnType<typeof makeMiner>, relayAck: boolean, gridPower = -4500, batteryPower = 0) => {
         const m = miner.measurements;
         const relayOn = confirmedPvRelayOn(m.relayValue, relayAck, m.relayTimestamp, m.relayOnValue, m.now, maxAgeMs);
-        const countdown = pvRestartCountdownSeconds(
-            { ...m, relayValue: relayAck ? m.relayValue : undefined },
-            180,
-        );
+        const countdown = pvRestartCountdownSeconds({ ...m, relayValue: relayAck ? m.relayValue : undefined }, 180);
         const reason = pvRestartSafetyReason({
             locked: miner.locked,
             shuttingDown: false,
@@ -58,10 +50,16 @@ describe('PV dual-miner restart scenarios (simulation only)', () => {
         const s9Result = evaluate(s9, true);
         const s19Result = evaluate(s19, false);
         expect(s9Result).to.deep.equal({
-            relayOn: false, countdown: 120, reason: 'restart_delay_running', locked: true,
+            relayOn: false,
+            countdown: 120,
+            reason: 'restart_delay_running',
+            locked: true,
         });
         expect(s19Result).to.deep.equal({
-            relayOn: null, countdown: null, reason: 'relay_feedback_missing_or_stale', locked: true,
+            relayOn: null,
+            countdown: null,
+            reason: 'relay_feedback_missing_or_stale',
+            locked: true,
         });
     });
 

@@ -15,7 +15,11 @@ export class MinerManager {
     private readonly commandTails = new Map<string, Promise<void>>();
     private commandGuard: ((id: string) => boolean) | undefined;
 
-    /** Reject queued control commands after a PV stop or during adapter shutdown. */
+    /**
+     * Reject queued control commands after a PV stop or during adapter shutdown.
+     *
+     * @param guard
+     */
     public setCommandGuard(guard: (id: string) => boolean): void {
         this.commandGuard = guard;
     }
@@ -47,6 +51,9 @@ export class MinerManager {
     /**
      * Reserve exclusive access to a miner across a multi-step control operation.
      * Use the provided miner rather than calling other manager methods inside the callback.
+     *
+     * @param id
+     * @param operation
      */
     public async withExclusiveMiner<T>(id: string, operation: (miner: Miner<MinerSettings>) => Promise<T>): Promise<T> {
         return this.runSerialized(id, async () => {
@@ -61,6 +68,9 @@ export class MinerManager {
     /**
      * Serialize a user-issued miner command and enforce the PV interlock inside the
      * command queue. Safety-only operations can still use withExclusiveMiner.
+     *
+     * @param id
+     * @param operation
      */
     public async withExclusiveMinerCommand<T>(
         id: string,

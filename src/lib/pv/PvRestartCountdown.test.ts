@@ -5,7 +5,12 @@ import type { PvStopRestoration } from './PvShutdownSafety';
 describe('PV restart countdown VIS diagnostics (never unlocks)', () => {
     const now = 1_800_000_000_000;
     const values = (): PvStopRestoration => ({
-        storedRecord: { minerId: 's9', relayStateId: 'sonoff.0.s9.POWER', stoppedAt: now - 30_000, relayOffConfirmed: true },
+        storedRecord: {
+            minerId: 's9',
+            relayStateId: 'sonoff.0.s9.POWER',
+            stoppedAt: now - 30_000,
+            relayOffConfirmed: true,
+        },
         minerId: 's9',
         relayStateId: 'sonoff.0.s9.POWER',
         relayOnValue: true,
@@ -24,7 +29,12 @@ describe('PV restart countdown VIS diagnostics (never unlocks)', () => {
         const v = values();
         v.storedRecord = undefined;
         expect(pvRestartCountdownSeconds(v, 180)).to.equal(null);
-        v.storedRecord = { minerId: 's19', relayStateId: v.relayStateId, stoppedAt: now - 30_000, relayOffConfirmed: true };
+        v.storedRecord = {
+            minerId: 's19',
+            relayStateId: v.relayStateId,
+            stoppedAt: now - 30_000,
+            relayOffConfirmed: true,
+        };
         expect(pvRestartCountdownSeconds(v, 180)).to.equal(null);
     });
     it('shows unknown for stale relay or unexpected ON state', () => {

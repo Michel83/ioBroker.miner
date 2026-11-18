@@ -27,11 +27,18 @@ describe('PV S9 delayed shutdown timing budget (simulation only)', () => {
         for (let elapsed = 0; elapsed <= 400_000; elapsed += pollMs) {
             const now = start + elapsed;
             const lastReadingIndex = Math.floor(elapsed / telemetryIntervalMs);
-            const powerTimestamp = lastReadingIndex === 0
-                ? pausedAt
-                : start + lastReadingIndex * telemetryIntervalMs;
-            if (confirmation.update(measurement(now, powerTimestamp), now, maxAgeMs, pausedAt,
-                30_000, 10_000, maxSensorGapMs)) {
+            const powerTimestamp = lastReadingIndex === 0 ? pausedAt : start + lastReadingIndex * telemetryIntervalMs;
+            if (
+                confirmation.update(
+                    measurement(now, powerTimestamp),
+                    now,
+                    maxAgeMs,
+                    pausedAt,
+                    30_000,
+                    10_000,
+                    maxSensorGapMs,
+                )
+            ) {
                 firstConfirmedAt ??= elapsed;
             }
         }
@@ -48,9 +55,7 @@ describe('PV S9 delayed shutdown timing budget (simulation only)', () => {
         for (let elapsed = 0; elapsed <= 400_000; elapsed += pollMs) {
             const now = start + elapsed;
             const readingIndex = Math.floor(elapsed / telemetryIntervalMs);
-            const powerTimestamp = readingIndex === 0
-                ? start - 1
-                : start + readingIndex * telemetryIntervalMs;
+            const powerTimestamp = readingIndex === 0 ? start - 1 : start + readingIndex * telemetryIntervalMs;
             if (confirmation.update(0, powerTimestamp, true, now, maxAgeMs)) {
                 firstConfirmedAt ??= elapsed;
             }

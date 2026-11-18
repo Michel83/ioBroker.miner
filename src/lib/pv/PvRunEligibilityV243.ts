@@ -3,24 +3,75 @@
  * a miner command, a stop request, or a relay write.
  */
 export interface PvRunEligibilityInputV243 {
+    /**
+     *
+     */
     now: number;
+    /**
+     *
+     */
     hour: number;
+    /**
+     *
+     */
     availableWatts: number | undefined;
+    /**
+     *
+     */
     s9Running: boolean | undefined;
+    /**
+     *
+     */
     s19Running: boolean | undefined;
+    /**
+     *
+     */
     s9TargetWatts: number | undefined;
+    /**
+     *
+     */
     s9ActualWatts: number | undefined;
+    /**
+     *
+     */
     gridPowerWatts: number | undefined;
+    /**
+     *
+     */
     s9ToS19CandidateSince?: number;
+    /**
+     *
+     */
     s9LowPowerSince?: number;
+    /**
+     *
+     */
     s19LowPowerSince?: number;
 }
 
+/**
+ *
+ */
 export interface PvRunEligibilityV243 {
+    /**
+     *
+     */
     s9: string;
+    /**
+     *
+     */
     s19: string;
+    /**
+     *
+     */
     s9ToS19CandidateSince?: number;
+    /**
+     *
+     */
     s9LowPowerSince?: number;
+    /**
+     *
+     */
     s19LowPowerSince?: number;
 }
 

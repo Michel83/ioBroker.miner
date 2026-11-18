@@ -2,10 +2,25 @@
  * Measurements used to confirm a safe PV miner shutdown.
  */
 export interface PvShutdownMeasurements {
+    /**
+     *
+     */
     hashrate: number | undefined;
+    /**
+     *
+     */
     hashrateTimestamp: number | undefined;
+    /**
+     *
+     */
     power: number | undefined;
+    /**
+     *
+     */
     powerTimestamp: number | undefined;
+    /**
+     *
+     */
     lastSeen: number | undefined;
 }
 
@@ -55,6 +70,9 @@ export class PvShutdownConfirmation {
     private lastPowerTimestamp: number | undefined;
     private confirmedSamples = 0;
 
+    /**
+     *
+     */
     public reset(): void {
         this.stableSince = undefined;
         this.lastCheckAt = undefined;
@@ -65,6 +83,16 @@ export class PvShutdownConfirmation {
         this.confirmedSamples = 0;
     }
 
+    /**
+     *
+     * @param values
+     * @param now
+     * @param maxAgeMs
+     * @param pausedAt
+     * @param stableMs
+     * @param maxCheckGapMs
+     * @param maxSensorGapMs
+     */
     public update(
         values: PvShutdownMeasurements,
         now: number,
@@ -138,21 +166,61 @@ export class PvShutdownConfirmation {
 
 /** Inputs for a fail-closed automatic PV restart decision. No hardware commands. */
 export interface PvRestartMeasurements {
+    /**
+     *
+     */
     enabled: boolean;
+    /**
+     *
+     */
     relayConfirmedOff: boolean;
+    /**
+     *
+     */
     gridPower: number | undefined;
+    /**
+     *
+     */
     batteryPower: number | undefined;
+    /**
+     *
+     */
     gridTimestamp: number | undefined;
+    /**
+     *
+     */
     batteryTimestamp: number | undefined;
+    /**
+     *
+     */
     now: number;
+    /**
+     *
+     */
     maxAgeMs: number;
+    /**
+     *
+     */
     reserveWatts: number;
+    /**
+     *
+     */
     minimumStartWatts: number;
+    /**
+     *
+     */
     lastStoppedAt: number | undefined;
+    /**
+     *
+     */
     restartDelayMs: number;
 }
 
-/** Allow a new relay-on request only with fresh measurements and sufficient export. */
+/**
+ * Allow a new relay-on request only with fresh measurements and sufficient export.
+ *
+ * @param values
+ */
 export function isPvRestartAllowed(values: PvRestartMeasurements): boolean {
     const fresh = (timestamp: number | undefined): boolean =>
         timestamp !== undefined &&
@@ -191,18 +259,49 @@ export function isPvRestartAllowed(values: PvRestartMeasurements): boolean {
 
 /** Evidence required before issuing a miner start command after relay power-on. */
 export interface PvStartReadiness {
+    /**
+     *
+     */
     relayOn: boolean;
+    /**
+     *
+     */
     relayAck: boolean;
+    /**
+     *
+     */
     relayTimestamp: number | undefined;
+    /**
+     *
+     */
     relayEnabledAt: number | undefined;
+    /**
+     *
+     */
     minerReachable: boolean;
+    /**
+     *
+     */
     minerSeenAt: number | undefined;
+    /**
+     *
+     */
     now: number;
+    /**
+     *
+     */
     maxAgeMs: number;
+    /**
+     *
+     */
     startupDelayMs: number;
 }
 
-/** Fail closed if relay feedback, boot delay or miner communication is uncertain. */
+/**
+ * Fail closed if relay feedback, boot delay or miner communication is uncertain.
+ *
+ * @param values
+ */
 export function isPvStartReady(values: PvStartReadiness): boolean {
     const fresh = (timestamp: number | undefined): boolean =>
         timestamp !== undefined &&
@@ -268,9 +367,21 @@ export async function executePvStartup(operations: PvStartupOperations): Promise
 
 /** Persisted PV relay shutdown record; never trust it without live relay feedback. */
 export interface PvPersistedStop {
+    /**
+     *
+     */
     minerId: string;
+    /**
+     *
+     */
     relayStateId: string;
+    /**
+     *
+     */
     stoppedAt: number;
+    /**
+     *
+     */
     relayOffConfirmed: boolean;
 }
 
@@ -316,15 +427,45 @@ export function parsePvPersistedStop(
 
 /** Inputs for read-only restoration of a previously confirmed PV stop. */
 export interface PvStopRestoration {
+    /**
+     *
+     */
     storedRecord: unknown;
+    /**
+     *
+     */
     minerId: string;
+    /**
+     *
+     */
     relayStateId: string;
+    /**
+     *
+     */
     relayOnValue: boolean;
+    /**
+     *
+     */
     relayValue: unknown;
+    /**
+     *
+     */
     relayTimestamp: number | undefined;
+    /**
+     *
+     */
     power: number | undefined;
+    /**
+     *
+     */
     powerTimestamp: number | undefined;
+    /**
+     *
+     */
     now: number;
+    /**
+     *
+     */
     maxAgeMs: number;
 }
 
@@ -357,7 +498,17 @@ export function isPvStopRestorationConsistent(values: PvStopRestoration): boolea
     );
 }
 
-/** Relay OFF feedback must be a fresh acknowledgement newer than the OFF request. */
+/**
+ * Relay OFF feedback must be a fresh acknowledgement newer than the OFF request.
+ *
+ * @param relayValue
+ * @param relayTimestamp
+ * @param relayAck
+ * @param relayOnValue
+ * @param requestedAt
+ * @param now
+ * @param maxAgeMs
+ */
 export function isPvRelayOffConfirmed(
     relayValue: unknown,
     relayTimestamp: number | undefined,
@@ -386,10 +537,22 @@ export class PvRelayOffPowerConfirmation {
     private lastPowerTimestamp: number;
     private consecutiveNearZero = 0;
 
+    /**
+     *
+     * @param requestedAt
+     */
     public constructor(private readonly requestedAt: number) {
         this.lastPowerTimestamp = requestedAt;
     }
 
+    /**
+     *
+     * @param power
+     * @param powerTimestamp
+     * @param relayConfirmedOff
+     * @param now
+     * @param maxAgeMs
+     */
     public update(
         power: number | undefined,
         powerTimestamp: number | undefined,
@@ -417,6 +580,9 @@ export class PvRelayOffPowerConfirmation {
         return this.consecutiveNearZero >= 3;
     }
 
+    /**
+     *
+     */
     public reset(): void {
         this.consecutiveNearZero = 0;
     }
@@ -425,6 +591,11 @@ export class PvRelayOffPowerConfirmation {
 /**
  * Fail-closed command policy for PV-controlled miners.
  * A persisted safe-stop record is diagnostic evidence only; it never unlocks commands.
+ *
+ * @param minerId
+ * @param activeSafeStops
+ * @param relayOffOrRestartLockedMiners
+ * @param adapterShuttingDown
  */
 export function isPvMinerCommandAllowed(
     minerId: string,
@@ -447,17 +618,48 @@ export function isPvMinerCommandAllowed(
  * any eventual unlock with the miner command queue.
  */
 export interface PvRestartUnlockCandidate {
+    /**
+     *
+     */
     minerId: string;
+    /**
+     *
+     */
     lockedMiners: ReadonlySet<string>;
+    /**
+     *
+     */
     activeSafeStops: ReadonlySet<string>;
+    /**
+     *
+     */
     adapterShuttingDown: boolean;
+    /**
+     *
+     */
     relayPoweredOnAt: number | undefined;
+    /**
+     *
+     */
     prePowerOnEvidence: PvPrePowerOnEvidence | undefined;
+    /**
+     *
+     */
     adapterSessionId: string;
+    /**
+     *
+     */
     restart: PvRestartMeasurements;
+    /**
+     *
+     */
     readiness: PvStartReadiness;
 }
 
+/**
+ *
+ * @param values
+ */
 export function isPvRestartUnlockCandidate(values: PvRestartUnlockCandidate): boolean {
     return (
         values.minerId.length > 0 &&
@@ -475,14 +677,36 @@ export function isPvRestartUnlockCandidate(values: PvRestartUnlockCandidate): bo
  * must now be ON. Diagnostic only: no lock mutation or hardware commands.
  */
 export interface PvPostPowerOnApproval {
+    /**
+     *
+     */
     minerId: string;
+    /**
+     *
+     */
     prePowerOnEvidence: PvPrePowerOnEvidence | undefined;
+    /**
+     *
+     */
     adapterSessionId: string;
+    /**
+     *
+     */
     relayPoweredOnAt: number | undefined;
+    /**
+     *
+     */
     restart: PvRestartMeasurements;
+    /**
+     *
+     */
     readiness: PvStartReadiness;
 }
 
+/**
+ *
+ * @param values
+ */
 export function isPvPostPowerOnApproved(values: PvPostPowerOnApproval): boolean {
     const poweredOnAt = values.relayPoweredOnAt;
     const restart = values.restart;
@@ -516,13 +740,33 @@ export function isPvPostPowerOnApproved(values: PvPostPowerOnApproval): boolean 
  * A saved record must never be accepted as a command authorization.
  */
 export interface PvPrePowerOnEvidence {
+    /**
+     *
+     */
     minerId: string;
+    /**
+     *
+     */
     adapterSessionId: string;
+    /**
+     *
+     */
     approvedAt: number;
+    /**
+     *
+     */
     expiresAt: number;
 }
 
-/** Reject mismatched, expired, future-dated or previous-session preflight evidence. */
+/**
+ * Reject mismatched, expired, future-dated or previous-session preflight evidence.
+ *
+ * @param evidence
+ * @param minerId
+ * @param adapterSessionId
+ * @param relayPoweredOnAt
+ * @param now
+ */
 export function isPvPrePowerOnEvidenceCurrent(
     evidence: PvPrePowerOnEvidence | undefined,
     minerId: string,

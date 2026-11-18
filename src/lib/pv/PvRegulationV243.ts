@@ -3,14 +3,35 @@
  * No ioBroker state writes, miner commands or relay operations.
  */
 export interface PvV243Inputs {
+    /**
+     *
+     */
     gridPower: number | undefined;
+    /**
+     *
+     */
     batteryPower: number | undefined;
+    /**
+     *
+     */
     batterySoc: number | undefined;
 }
 
+/**
+ *
+ */
 export interface PvV243Result {
+    /**
+     *
+     */
     availableWatts: number;
+    /**
+     *
+     */
     batteryChargeDeficitWatts: number;
+    /**
+     *
+     */
     effectiveGridWatts: number;
 }
 
@@ -49,6 +70,11 @@ export function calculatePvV243(values: PvV243Inputs): PvV243Result | undefined 
  * The caller owns the candidate timestamp and resets it when conditions cease to hold.
  *
  * @param values - current target, measured power, export and stability timestamps
+ * @param values.s9TargetWatts
+ * @param values.s9ActualWatts
+ * @param values.gridPowerWatts
+ * @param values.candidateSince
+ * @param values.now
  */
 export function isS9ToS19ReadyV243(values: {
     s9TargetWatts: number;

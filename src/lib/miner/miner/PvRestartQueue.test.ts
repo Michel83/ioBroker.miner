@@ -22,7 +22,7 @@ describe('PV restart unlock and miner command queue (simulation only)', () => {
                     return Promise.resolve();
                 },
             } as unknown as ReturnType<MinerManager['getMiners']>[number];
-            (manager as unknown as { miners: typeof miner[] }).miners.push(miner);
+            (manager as unknown as { miners: (typeof miner)[] }).miners.push(miner);
         }
         manager.setCommandGuard(id => !locks.has(id));
         return { manager, locks, calls };
@@ -36,7 +36,12 @@ describe('PV restart unlock and miner command queue (simulation only)', () => {
             adapterShuttingDown: false,
             relayPoweredOnAt: poweredOnAt,
             adapterSessionId: 'session-current',
-            prePowerOnEvidence: { minerId: id, adapterSessionId: 'session-current', approvedAt: poweredOnAt - 1000, expiresAt: now + 5000 },
+            prePowerOnEvidence: {
+                minerId: id,
+                adapterSessionId: 'session-current',
+                approvedAt: poweredOnAt - 1000,
+                expiresAt: now + 5000,
+            },
             restart: {
                 enabled: true,
                 relayConfirmedOff: false,
@@ -148,7 +153,12 @@ describe('PV restart unlock and miner command queue (simulation only)', () => {
         await manager.stopMiner('s9');
         release();
         await s19;
-        expect(await manager.startMiner('s19').then(() => false, () => true)).to.equal(true);
+        expect(
+            await manager.startMiner('s19').then(
+                () => false,
+                () => true,
+            ),
+        ).to.equal(true);
         expect(locks.has('s19')).to.equal(true);
         expect(locks.has('s9')).to.equal(true);
         expect(calls).to.deep.equal(['stop:s9']);
@@ -166,15 +176,16 @@ describe('PV restart unlock and miner command queue (simulation only)', () => {
         const waiting = new Promise<void>(resolve => {
             bothEntered = resolve;
         });
-        const check = (id: string): Promise<void> => manager.withExclusiveMiner(id, async () => {
-            entered += 1;
-            if (entered === 2) {
-                bothEntered();
-            }
-            await gate;
-            const current = { ...evidence(id, locks), adapterShuttingDown: shuttingDown };
-            expect(isPvRestartUnlockCandidate(current)).to.equal(false);
-        });
+        const check = (id: string): Promise<void> =>
+            manager.withExclusiveMiner(id, async () => {
+                entered += 1;
+                if (entered === 2) {
+                    bothEntered();
+                }
+                await gate;
+                const current = { ...evidence(id, locks), adapterShuttingDown: shuttingDown };
+                expect(isPvRestartUnlockCandidate(current)).to.equal(false);
+            });
         const s9 = check('s9');
         const s19 = check('s19');
         await waiting;
@@ -185,5 +196,4 @@ describe('PV restart unlock and miner command queue (simulation only)', () => {
         expect(locks.has('s19')).to.equal(true);
         expect(calls).to.deep.equal([]);
     });
-
 });

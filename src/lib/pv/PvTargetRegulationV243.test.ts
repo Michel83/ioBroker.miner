@@ -97,12 +97,21 @@ describe('V2.43 pure power target regulation', () => {
         }
     });
     it('keeps battery protection at S9 minimum and rejects invalid battery measurements', () => {
-        expect(decidePvTargetV243({
-            ...base, currentTargetWatts: 500, effectiveGridWatts: 200, batteryPowerWatts: 150,
-        }).reason).to.equal('s9-battery-protection');
-        expect(decidePvTargetV243({
-            ...base, effectiveGridWatts: -2000, batteryPowerWatts: NaN,
-        }).action).to.equal('hold');
+        expect(
+            decidePvTargetV243({
+                ...base,
+                currentTargetWatts: 500,
+                effectiveGridWatts: 200,
+                batteryPowerWatts: 150,
+            }).reason,
+        ).to.equal('s9-battery-protection');
+        expect(
+            decidePvTargetV243({
+                ...base,
+                effectiveGridWatts: -2000,
+                batteryPowerWatts: NaN,
+            }).action,
+        ).to.equal('hold');
     });
     it('holds the 200 W grid reserve during small export fluctuations for both miners', () => {
         for (const miner of ['S9', 'S19'] as const) {
@@ -135,20 +144,27 @@ describe('V2.43 pure power target regulation', () => {
             increaseCandidateSince: 600000,
         });
         const spikeGone = decidePvTargetV243({
-            ...input, now: 660000, effectiveGridWatts: -200,
+            ...input,
+            now: 660000,
+            effectiveGridWatts: -200,
             increaseCandidateWatts: first.increaseCandidateWatts,
             increaseCandidateSince: first.increaseCandidateSince,
         });
         expect(spikeGone.action).to.equal('hold');
         const newCandidate = decidePvTargetV243({
-            ...input, now: 720000,
+            ...input,
+            now: 720000,
         });
         expect(newCandidate.increaseCandidateSince).to.equal(720000);
-        expect(decidePvTargetV243({
-            ...input, now: 900000, batteryPowerWatts: 100,
-            increaseCandidateWatts: newCandidate.increaseCandidateWatts,
-            increaseCandidateSince: newCandidate.increaseCandidateSince,
-        })).to.include({ action: 'hold', reason: 'battery-discharging' });
+        expect(
+            decidePvTargetV243({
+                ...input,
+                now: 900000,
+                batteryPowerWatts: 100,
+                increaseCandidateWatts: newCandidate.increaseCandidateWatts,
+                increaseCandidateSince: newCandidate.increaseCandidateSince,
+            }),
+        ).to.include({ action: 'hold', reason: 'battery-discharging' });
     });
     it('rejects invalid or missing measurements without a target command', () => {
         expect(decidePvTargetV243({ ...base, effectiveGridWatts: NaN }).action).to.equal('hold');

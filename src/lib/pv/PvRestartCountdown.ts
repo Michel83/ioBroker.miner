@@ -1,6 +1,11 @@
 import { isPvStopRestorationConsistent, parsePvPersistedStop, type PvStopRestoration } from './PvShutdownSafety';
 
-/** Read-only countdown; never authorizes a restart. */
+/**
+ * Read-only countdown; never authorizes a restart.
+ *
+ * @param values
+ * @param restartDelaySeconds
+ */
 export function pvRestartCountdownSeconds(values: PvStopRestoration, restartDelaySeconds: unknown): number | null {
     if (
         typeof restartDelaySeconds !== 'number' ||

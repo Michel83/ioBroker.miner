@@ -141,9 +141,16 @@ describe('V2.43 read-only start and stop eligibility', () => {
     });
     it('simulates a full PV day with both miners, fluctuations, recovery and evening lockout', () => {
         let history: ReturnType<typeof evaluatePvRunEligibilityV243> | undefined;
-        const step = (minute: number, hour: number, availableWatts: number | undefined,
-            s9Running: boolean, s19Running: boolean, gridPowerWatts: number,
-            s9TargetWatts = 1800, s9ActualWatts = 1300) => {
+        const step = (
+            minute: number,
+            hour: number,
+            availableWatts: number | undefined,
+            s9Running: boolean,
+            s19Running: boolean,
+            gridPowerWatts: number,
+            s9TargetWatts = 1800,
+            s9ActualWatts = 1300,
+        ) => {
             const result = evaluatePvRunEligibilityV243({
                 now: minute * 60_000,
                 hour,
@@ -184,5 +191,4 @@ describe('V2.43 read-only start and stop eligibility', () => {
         expect(step(906, 15, 400, true, true, 200).s19).to.equal('low-power-wait');
         expect(step(1200, 20, 3500, false, false, -3700).s9).to.equal('outside-window');
     });
-
 });

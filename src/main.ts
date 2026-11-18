@@ -34,10 +34,9 @@ import { pvRestartCountdownSeconds } from './lib/pv/PvRestartCountdown';
 import { pvRestartSafetyReason } from './lib/pv/PvRestartSafetyReason';
 import { evaluatePvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
 import type { PvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
-import type { PvMinerKindV243 } from './lib/pv/PvTargetRegulationV243';
+import type { PvMinerKindV243, PvTargetDecisionV243 } from './lib/pv/PvTargetRegulationV243';
 import { PvTargetDiagnosticV243 } from './lib/pv/PvTargetDiagnosticV243';
 import { coordinatePvTargetsV243 } from './lib/pv/PvDualMinerBudgetV243';
-import type { PvTargetDecisionV243 } from './lib/pv/PvTargetRegulationV243';
 import { UpdateSources } from './lib/update/UpdateSources';
 import { runUpdateChecks, type UpdateCheckSummary } from './lib/update/runUpdateChecks';
 import type { UpdateCheckContext, UpdateCheckResult } from './lib/miner/model/UpdateCheckResult';
@@ -347,12 +346,14 @@ export class MinerAdapter extends utils.Adapter {
                         return;
                     }
 
-                    if (!isPvMinerCommandAllowed(
-                        deviceSettings.settings.id,
-                        this.pvSafeStops,
-                        this.pvRelayOffMiners,
-                        this.pvShuttingDown,
-                    )) {
+                    if (
+                        !isPvMinerCommandAllowed(
+                            deviceSettings.settings.id,
+                            this.pvSafeStops,
+                            this.pvRelayOffMiners,
+                            this.pvShuttingDown,
+                        )
+                    ) {
                         this.log.warn(
                             `setPowerTarget blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`,
                         );
@@ -778,7 +779,9 @@ export class MinerAdapter extends utils.Adapter {
                     ack: true,
                 });
             } catch (error) {
-                this.log.warn(`PV restart lock diagnostic write failed for ${settings.name}; lock remains active: ${String(error)}`);
+                this.log.warn(
+                    `PV restart lock diagnostic write failed for ${settings.name}; lock remains active: ${String(error)}`,
+                );
             }
         }
         const enabledState = await this.getStateAsync(`${device._id}.enabled`);
@@ -1486,7 +1489,8 @@ export class MinerAdapter extends utils.Adapter {
                         const recordState = await this.getStateAsync(`${base}.lastSafeStop`);
                         let storedRecord: unknown;
                         try {
-                            storedRecord = typeof recordState?.val === 'string' ? JSON.parse(recordState.val) : undefined;
+                            storedRecord =
+                                typeof recordState?.val === 'string' ? JSON.parse(recordState.val) : undefined;
                         } catch {
                             storedRecord = undefined;
                         }
@@ -1495,18 +1499,21 @@ export class MinerAdapter extends utils.Adapter {
                             this.readFreshPvMeasurement(pv.powerStateId || '', ageMs),
                         ]);
                         const now = Date.now();
-                        countdown = pvRestartCountdownSeconds({
-                            storedRecord,
-                            minerId: settings.settings.id,
-                            relayStateId: pv.relayStateId,
-                            relayOnValue: pv.relayOnValue,
-                            relayValue: relay?.ack === true ? relay.val : undefined,
-                            relayTimestamp: relay?.ts,
-                            power: power?.value,
-                            powerTimestamp: power?.timestamp,
-                            now,
-                            maxAgeMs: ageMs,
-                        }, pv.restartDelay);
+                        countdown = pvRestartCountdownSeconds(
+                            {
+                                storedRecord,
+                                minerId: settings.settings.id,
+                                relayStateId: pv.relayStateId,
+                                relayOnValue: pv.relayOnValue,
+                                relayValue: relay?.ack === true ? relay.val : undefined,
+                                relayTimestamp: relay?.ts,
+                                power: power?.value,
+                                powerTimestamp: power?.timestamp,
+                                now,
+                                maxAgeMs: ageMs,
+                            },
+                            pv.restartDelay,
+                        );
                     } catch {
                         // Incomplete diagnostics must never invent a countdown.
                     }
@@ -1514,8 +1521,10 @@ export class MinerAdapter extends utils.Adapter {
                 await this.setState(`${base}.restartCountdown`, { val: countdown, ack: true });
                 // The lock is the authoritative in-memory command guard.
                 // The reason below only explains observations and cannot unlock it.
-                const locked = this.pvRelayOffMiners.has(settings.settings.id) ||
-                    this.pvSafeStops.has(settings.settings.id) || this.pvShuttingDown;
+                const locked =
+                    this.pvRelayOffMiners.has(settings.settings.id) ||
+                    this.pvSafeStops.has(settings.settings.id) ||
+                    this.pvShuttingDown;
                 const [observedGrid, observedBattery] = await Promise.all([
                     this.readFreshPvValue(this.config.pvGridPowerId || '', ageMs),
                     this.readFreshPvValue(this.config.pvBatteryPowerId || '', ageMs),
@@ -1574,30 +1583,35 @@ export class MinerAdapter extends utils.Adapter {
                     now: Date.now(),
                 });
             }
-            const coordinated = v243 && grid !== undefined && battery !== undefined &&
-                observedTargets.S9 !== undefined && observedTargets.S19 !== undefined &&
-                proposals.S9 !== undefined && proposals.S19 !== undefined
-                ? coordinatePvTargetsV243({
-                    s9: {
-                        miner: 'S9',
-                        currentTargetWatts: observedTargets.S9,
-                        effectiveGridWatts: v243.effectiveGridWatts,
-                        batteryPowerWatts: battery,
-                        now: Date.now(),
-                    },
-                    s19: {
-                        miner: 'S19',
-                        currentTargetWatts: observedTargets.S19,
-                        effectiveGridWatts: v243.effectiveGridWatts,
-                        batteryPowerWatts: battery,
-                        now: Date.now(),
-                    },
-                    gridPowerWatts: v243.effectiveGridWatts,
-                    batteryPowerWatts: battery,
-                    reserveWatts: reserve,
-                    proposals: { s9: proposals.S9, s19: proposals.S19 },
-                })
-                : undefined;
+            const coordinated =
+                v243 &&
+                grid !== undefined &&
+                battery !== undefined &&
+                observedTargets.S9 !== undefined &&
+                observedTargets.S19 !== undefined &&
+                proposals.S9 !== undefined &&
+                proposals.S19 !== undefined
+                    ? coordinatePvTargetsV243({
+                          s9: {
+                              miner: 'S9',
+                              currentTargetWatts: observedTargets.S9,
+                              effectiveGridWatts: v243.effectiveGridWatts,
+                              batteryPowerWatts: battery,
+                              now: Date.now(),
+                          },
+                          s19: {
+                              miner: 'S19',
+                              currentTargetWatts: observedTargets.S19,
+                              effectiveGridWatts: v243.effectiveGridWatts,
+                              batteryPowerWatts: battery,
+                              now: Date.now(),
+                          },
+                          gridPowerWatts: v243.effectiveGridWatts,
+                          batteryPowerWatts: battery,
+                          reserveWatts: reserve,
+                          proposals: { s9: proposals.S9, s19: proposals.S19 },
+                      })
+                    : undefined;
             for (const miner of ['S9', 'S19'] as PvMinerKindV243[]) {
                 const prefix = miner === 'S9' ? 's9' : 's19';
                 const decision = coordinated ? (miner === 'S9' ? coordinated.s9 : coordinated.s19) : undefined;
@@ -1676,6 +1690,8 @@ export class MinerAdapter extends utils.Adapter {
      * Stop mining and disconnect the relay only after fresh, stable evidence of zero
      * hashrate AND low mains power. A pause command alone is not confirmation.
      * No relay write occurs if any check fails or the adapter is unloading.
+     *
+     * @param settings
      */
     private async safeStopPvMiner(settings: IOBrokerMinerSettings): Promise<void> {
         const id = settings.settings.id;

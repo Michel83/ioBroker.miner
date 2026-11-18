@@ -1,9 +1,5 @@
 import { expect } from 'chai';
-import {
-    isPvPostPowerOnApproved,
-    isPvRestartAllowed,
-    type PvPostPowerOnApproval,
-} from './PvShutdownSafety';
+import { isPvPostPowerOnApproved, isPvRestartAllowed, type PvPostPowerOnApproval } from './PvShutdownSafety';
 
 describe('PV restart distinct relay OFF and ON stages (diagnostic only)', () => {
     const now = 1_800_000_000_000;
@@ -11,7 +7,12 @@ describe('PV restart distinct relay OFF and ON stages (diagnostic only)', () => 
     const values = (): PvPostPowerOnApproval => ({
         minerId: 's9',
         adapterSessionId: 'session-current',
-        prePowerOnEvidence: { minerId: 's9', adapterSessionId: 'session-current', approvedAt: poweredOnAt - 1000, expiresAt: now + 5000 },
+        prePowerOnEvidence: {
+            minerId: 's9',
+            adapterSessionId: 'session-current',
+            approvedAt: poweredOnAt - 1000,
+            expiresAt: now + 5000,
+        },
         relayPoweredOnAt: poweredOnAt,
         restart: {
             enabled: true,
@@ -106,5 +107,4 @@ describe('PV restart distinct relay OFF and ON stages (diagnostic only)', () => 
         disconnected.readiness.minerSeenAt = now - 15_001;
         expect(isPvPostPowerOnApproved(disconnected)).to.equal(false);
     });
-
 });

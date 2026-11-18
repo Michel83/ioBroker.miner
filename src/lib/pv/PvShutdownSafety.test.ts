@@ -515,9 +515,14 @@ describe('PV restart release remains diagnostic only', () => {
 
     it('blocks even tiny battery discharge despite abundant PV export', () => {
         for (const batteryPower of [0.01, 1, 100, 500]) {
-            expect(isPvRestartAllowed({
-                ...base(), gridPower: -10_000, batteryPower,
-            }), `battery discharge ${batteryPower} W`).to.equal(false);
+            expect(
+                isPvRestartAllowed({
+                    ...base(),
+                    gridPower: -10_000,
+                    batteryPower,
+                }),
+                `battery discharge ${batteryPower} W`,
+            ).to.equal(false);
         }
     });
 
@@ -1218,7 +1223,12 @@ describe('PV restart unlock candidate remains read-only', () => {
         adapterShuttingDown: false,
         relayPoweredOnAt,
         adapterSessionId: 'session-current',
-        prePowerOnEvidence: { minerId, adapterSessionId: 'session-current', approvedAt: relayPoweredOnAt - 1000, expiresAt: now + 5000 },
+        prePowerOnEvidence: {
+            minerId,
+            adapterSessionId: 'session-current',
+            approvedAt: relayPoweredOnAt - 1000,
+            expiresAt: now + 5000,
+        },
         restart: {
             enabled: true,
             relayConfirmedOff: false,
@@ -1267,26 +1277,34 @@ describe('PV restart unlock candidate remains read-only', () => {
 
     it('rejects measurements that predate relay power-on', () => {
         const values = candidate('s9');
-        expect(isPvRestartUnlockCandidate({
-            ...values,
-            restart: { ...values.restart, gridTimestamp: relayPoweredOnAt },
-        })).to.equal(false);
-        expect(isPvRestartUnlockCandidate({
-            ...values,
-            restart: { ...values.restart, batteryTimestamp: relayPoweredOnAt },
-        })).to.equal(false);
+        expect(
+            isPvRestartUnlockCandidate({
+                ...values,
+                restart: { ...values.restart, gridTimestamp: relayPoweredOnAt },
+            }),
+        ).to.equal(false);
+        expect(
+            isPvRestartUnlockCandidate({
+                ...values,
+                restart: { ...values.restart, batteryTimestamp: relayPoweredOnAt },
+            }),
+        ).to.equal(false);
     });
 
     it('rejects a mismatched relay-on event or stale relay feedback', () => {
         const values = candidate('s19');
-        expect(isPvRestartUnlockCandidate({
-            ...values,
-            readiness: { ...values.readiness, relayEnabledAt: relayPoweredOnAt - 1 },
-        })).to.equal(false);
-        expect(isPvRestartUnlockCandidate({
-            ...values,
-            readiness: { ...values.readiness, relayTimestamp: now - 20_000 },
-        })).to.equal(false);
+        expect(
+            isPvRestartUnlockCandidate({
+                ...values,
+                readiness: { ...values.readiness, relayEnabledAt: relayPoweredOnAt - 1 },
+            }),
+        ).to.equal(false);
+        expect(
+            isPvRestartUnlockCandidate({
+                ...values,
+                readiness: { ...values.readiness, relayTimestamp: now - 20_000 },
+            }),
+        ).to.equal(false);
     });
 
     it('rejects shutdown, active safe stop, absent lock and lost PV export', () => {
@@ -1294,10 +1312,12 @@ describe('PV restart unlock candidate remains read-only', () => {
         expect(isPvRestartUnlockCandidate({ ...values, adapterShuttingDown: true })).to.equal(false);
         expect(isPvRestartUnlockCandidate({ ...values, activeSafeStops: new Set(['s9']) })).to.equal(false);
         expect(isPvRestartUnlockCandidate({ ...values, lockedMiners: new Set(['s19']) })).to.equal(false);
-        expect(isPvRestartUnlockCandidate({
-            ...values,
-            restart: { ...values.restart, gridPower: -100 },
-        })).to.equal(false);
+        expect(
+            isPvRestartUnlockCandidate({
+                ...values,
+                restart: { ...values.restart, gridPower: -100 },
+            }),
+        ).to.equal(false);
     });
 });
 
@@ -1312,7 +1332,12 @@ describe('PV unlock transaction simulation (test-only, no adapter wiring)', () =
         adapterShuttingDown: false,
         relayPoweredOnAt: poweredOnAt,
         adapterSessionId: 'session-current',
-        prePowerOnEvidence: { minerId, adapterSessionId: 'session-current', approvedAt: poweredOnAt - 1000, expiresAt: now + 5000 },
+        prePowerOnEvidence: {
+            minerId,
+            adapterSessionId: 'session-current',
+            approvedAt: poweredOnAt - 1000,
+            expiresAt: now + 5000,
+        },
         restart: {
             enabled: true,
             relayConfirmedOff: false,
@@ -1405,13 +1430,37 @@ describe('PV pre-power-on evidence binding (diagnostic only)', () => {
     });
 
     it('rejects expired evidence or approval after relay power-on', () => {
-        expect(isPvPrePowerOnEvidenceCurrent({ ...evidence, expiresAt: now - 1 }, 's9', 'session-current', poweredOnAt, now)).to.equal(false);
-        expect(isPvPrePowerOnEvidenceCurrent({ ...evidence, approvedAt: poweredOnAt + 1 }, 's9', 'session-current', poweredOnAt, now)).to.equal(false);
+        expect(
+            isPvPrePowerOnEvidenceCurrent(
+                { ...evidence, expiresAt: now - 1 },
+                's9',
+                'session-current',
+                poweredOnAt,
+                now,
+            ),
+        ).to.equal(false);
+        expect(
+            isPvPrePowerOnEvidenceCurrent(
+                { ...evidence, approvedAt: poweredOnAt + 1 },
+                's9',
+                'session-current',
+                poweredOnAt,
+                now,
+            ),
+        ).to.equal(false);
     });
 
     it('rejects absent evidence and invalid timestamps', () => {
         expect(isPvPrePowerOnEvidenceCurrent(undefined, 's9', 'session-current', poweredOnAt, now)).to.equal(false);
         expect(isPvPrePowerOnEvidenceCurrent(evidence, 's9', 'session-current', undefined, now)).to.equal(false);
-        expect(isPvPrePowerOnEvidenceCurrent({ ...evidence, approvedAt: Number.NaN }, 's9', 'session-current', poweredOnAt, now)).to.equal(false);
+        expect(
+            isPvPrePowerOnEvidenceCurrent(
+                { ...evidence, approvedAt: Number.NaN },
+                's9',
+                'session-current',
+                poweredOnAt,
+                now,
+            ),
+        ).to.equal(false);
     });
 });

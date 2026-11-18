@@ -4,6 +4,16 @@ import { decidePvTargetV243, type PvTargetDecisionV243, type PvTargetInputsV243 
  * Read-only coordination of two independently calculated target proposals.
  * Never dispatches commands. An increase is admitted only if the entire
  * requested increment fits the shared, conservative grid-export budget.
+ *
+ * @param input
+ * @param input.s9
+ * @param input.s19
+ * @param input.gridPowerWatts
+ * @param input.batteryPowerWatts
+ * @param input.reserveWatts
+ * @param input.proposals
+ * @param input.proposals.s9
+ * @param input.proposals.s19
  */
 export function coordinatePvTargetsV243(input: {
     s9: PvTargetInputsV243;
@@ -16,12 +26,16 @@ export function coordinatePvTargetsV243(input: {
     const { s9, s19, gridPowerWatts: grid, batteryPowerWatts: battery, reserveWatts: reserve } = input;
     const blocked = { action: 'hold', reason: 'shared-budget-unavailable' } as const;
     if (
-        s9.miner !== 'S9' || s19.miner !== 'S19' ||
-        ![grid, battery, reserve].every(Number.isFinite) || reserve < 0 ||
-        !Number.isFinite(s9.currentTargetWatts) || !Number.isFinite(s19.currentTargetWatts) ||
+        s9.miner !== 'S9' ||
+        s19.miner !== 'S19' ||
+        ![grid, battery, reserve].every(Number.isFinite) ||
+        reserve < 0 ||
+        !Number.isFinite(s9.currentTargetWatts) ||
+        !Number.isFinite(s19.currentTargetWatts) ||
         s9.effectiveGridWatts !== s19.effectiveGridWatts ||
         s9.batteryPowerWatts !== s19.batteryPowerWatts ||
-        s9.effectiveGridWatts !== grid || s9.batteryPowerWatts !== battery
+        s9.effectiveGridWatts !== grid ||
+        s9.batteryPowerWatts !== battery
     ) {
         return { s9: blocked, s19: blocked };
     }
@@ -30,8 +44,7 @@ export function coordinatePvTargetsV243(input: {
     const s19Decision = input.proposals?.s19 ?? decidePvTargetV243(s19);
     const s9Decision = input.proposals?.s9 ?? decidePvTargetV243(s9);
     const admit = (decision: PvTargetDecisionV243, current: number): PvTargetDecisionV243 => {
-        if (decision.action !== 'set-target' || decision.targetWatts === undefined ||
-            decision.targetWatts <= current) {
+        if (decision.action !== 'set-target' || decision.targetWatts === undefined || decision.targetWatts <= current) {
             return decision;
         }
         const increment = decision.targetWatts - current;

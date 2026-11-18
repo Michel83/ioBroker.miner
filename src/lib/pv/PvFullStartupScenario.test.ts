@@ -12,19 +12,29 @@ import {
 describe('PV complete startup chain (simulation only)', () => {
     const now = 1_800_000_000_000;
     const makeRestart = (minimumStartWatts: number): PvRestartMeasurements => ({
-        enabled: true, relayConfirmedOff: true,
-        gridPower: -4500, batteryPower: 0,
-        gridTimestamp: now, batteryTimestamp: now,
-        now, maxAgeMs: 15_000, reserveWatts: 200,
-        minimumStartWatts, lastStoppedAt: now - 240_000,
+        enabled: true,
+        relayConfirmedOff: true,
+        gridPower: -4500,
+        batteryPower: 0,
+        gridTimestamp: now,
+        batteryTimestamp: now,
+        now,
+        maxAgeMs: 15_000,
+        reserveWatts: 200,
+        minimumStartWatts,
+        lastStoppedAt: now - 240_000,
         restartDelayMs: 180_000,
     });
     const makeReadiness = (): PvStartReadiness => ({
-        relayOn: true, relayAck: true,
+        relayOn: true,
+        relayAck: true,
         relayEnabledAt: now - 120_000,
         relayTimestamp: now,
-        minerReachable: true, minerSeenAt: now,
-        now, maxAgeMs: 15_000, startupDelayMs: 120_000,
+        minerReachable: true,
+        minerSeenAt: now,
+        now,
+        maxAgeMs: 15_000,
+        startupDelayMs: 120_000,
     });
     const simulate = async (
         minerId: string,
@@ -77,51 +87,71 @@ describe('PV complete startup chain (simulation only)', () => {
 
     it('completes all simulated safety stages for S9 but command guard stays locked', async () => {
         expect(await simulate('s9', 500)).to.deep.equal([
-            'preflight', 'relay-on-simulated', 'readiness', 'final-pv-check',
-            'start-request-simulated', 'command-guard-blocked',
+            'preflight',
+            'relay-on-simulated',
+            'readiness',
+            'final-pv-check',
+            'start-request-simulated',
+            'command-guard-blocked',
         ]);
     });
 
     it('completes all simulated safety stages for S19 but command guard stays locked', async () => {
         expect(await simulate('s19', 1800)).to.deep.equal([
-            'preflight', 'relay-on-simulated', 'readiness', 'final-pv-check',
-            'start-request-simulated', 'command-guard-blocked',
+            'preflight',
+            'relay-on-simulated',
+            'readiness',
+            'final-pv-check',
+            'start-request-simulated',
+            'command-guard-blocked',
         ]);
     });
 
     it('blocks both miners when PV export disappears after simulated relay ON', async () => {
-        for (const [minerId, minimumStartWatts] of [['s9', 500], ['s19', 1800]] as const) {
-            expect(await simulate(minerId, minimumStartWatts, {
-                beforeMiner: { gridPower: 400 },
-            })).to.deep.equal([
-                'preflight', 'relay-on-simulated', 'readiness', 'final-pv-check',
-            ]);
+        for (const [minerId, minimumStartWatts] of [
+            ['s9', 500],
+            ['s19', 1800],
+        ] as const) {
+            expect(
+                await simulate(minerId, minimumStartWatts, {
+                    beforeMiner: { gridPower: 400 },
+                }),
+            ).to.deep.equal(['preflight', 'relay-on-simulated', 'readiness', 'final-pv-check']);
         }
     });
 
     it('blocks both miners when battery starts discharging after simulated relay ON', async () => {
-        for (const [minerId, minimumStartWatts] of [['s9', 500], ['s19', 1800]] as const) {
-            expect(await simulate(minerId, minimumStartWatts, {
-                beforeMiner: { batteryPower: 1 },
-            })).to.deep.equal([
-                'preflight', 'relay-on-simulated', 'readiness', 'final-pv-check',
-            ]);
+        for (const [minerId, minimumStartWatts] of [
+            ['s9', 500],
+            ['s19', 1800],
+        ] as const) {
+            expect(
+                await simulate(minerId, minimumStartWatts, {
+                    beforeMiner: { batteryPower: 1 },
+                }),
+            ).to.deep.equal(['preflight', 'relay-on-simulated', 'readiness', 'final-pv-check']);
         }
     });
 
     it('blocks when fresh relay confirmation or miner communication is missing', async () => {
-        expect(await simulate('s19', 1800, {
-            readiness: { relayAck: false },
-        })).to.deep.equal(['preflight', 'relay-on-simulated', 'readiness']);
-        expect(await simulate('s9', 500, {
-            readiness: { minerSeenAt: now - 20_000 },
-        })).to.deep.equal(['preflight', 'relay-on-simulated', 'readiness']);
+        expect(
+            await simulate('s19', 1800, {
+                readiness: { relayAck: false },
+            }),
+        ).to.deep.equal(['preflight', 'relay-on-simulated', 'readiness']);
+        expect(
+            await simulate('s9', 500, {
+                readiness: { minerSeenAt: now - 20_000 },
+            }),
+        ).to.deep.equal(['preflight', 'relay-on-simulated', 'readiness']);
     });
 
     it('never switches a simulated relay ON when the initial PV check fails', async () => {
-        expect(await simulate('s19', 1800, {
-            beforeRelay: { gridPower: -500 },
-        })).to.deep.equal(['preflight']);
+        expect(
+            await simulate('s19', 1800, {
+                beforeRelay: { gridPower: -500 },
+            }),
+        ).to.deep.equal(['preflight']);
     });
 
     it('requires valid post-relay startup readiness before any final PV check', () => {

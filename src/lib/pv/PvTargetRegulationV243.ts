@@ -4,23 +4,71 @@
  */
 export type PvMinerKindV243 = 'S9' | 'S19';
 
+/**
+ *
+ */
 export interface PvTargetInputsV243 {
+    /**
+     *
+     */
     miner: PvMinerKindV243;
+    /**
+     *
+     */
     currentTargetWatts: number;
+    /**
+     *
+     */
     effectiveGridWatts: number;
+    /**
+     *
+     */
     batteryPowerWatts: number;
+    /**
+     *
+     */
     now: number;
+    /**
+     *
+     */
     lastRegulationAt?: number;
+    /**
+     *
+     */
     lastTargetChangeAt?: number;
+    /**
+     *
+     */
     increaseCandidateWatts?: number;
+    /**
+     *
+     */
     increaseCandidateSince?: number;
 }
 
+/**
+ *
+ */
 export interface PvTargetDecisionV243 {
+    /**
+     *
+     */
     action: 'hold' | 'set-target' | 'request-stop';
+    /**
+     *
+     */
     targetWatts?: number;
+    /**
+     *
+     */
     reason: string;
+    /**
+     *
+     */
     increaseCandidateWatts?: number;
+    /**
+     *
+     */
     increaseCandidateSince?: number;
 }
 

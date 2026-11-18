@@ -14,8 +14,11 @@ describe('PV shutdown sequence after sudden export loss (simulation only)', () =
     const pausedAt = start - 1000;
     const ageMs = 180_000;
     const sample = (at: number, hashrate = 0, power = 75): PvShutdownMeasurements => ({
-        hashrate, hashrateTimestamp: at,
-        power, powerTimestamp: at, lastSeen: at,
+        hashrate,
+        hashrateTimestamp: at,
+        power,
+        powerTimestamp: at,
+        lastSeen: at,
     });
 
     const confirmStopped = (change?: (seconds: number) => PvShutdownMeasurements): boolean => {
@@ -25,7 +28,12 @@ describe('PV shutdown sequence after sudden export loss (simulation only)', () =
             const at = start + seconds * 1000;
             confirmed = confirmation.update(
                 change ? change(seconds) : sample(at),
-                at, ageMs, pausedAt, 30_000, 10_000, 15_000,
+                at,
+                ageMs,
+                pausedAt,
+                30_000,
+                10_000,
+                15_000,
             );
         }
         return confirmed;
@@ -45,10 +53,12 @@ describe('PV shutdown sequence after sudden export loss (simulation only)', () =
     });
 
     it('blocks relay OFF when power telemetry stops updating', () => {
-        expect(confirmStopped(seconds => ({
-            ...sample(start + seconds * 1000),
-            powerTimestamp: start,
-        }))).to.equal(false);
+        expect(
+            confirmStopped(seconds => ({
+                ...sample(start + seconds * 1000),
+                powerTimestamp: start,
+            })),
+        ).to.equal(false);
     });
 
     it('blocks relay OFF when a final independent stop check fails', () => {
@@ -58,9 +68,15 @@ describe('PV shutdown sequence after sudden export loss (simulation only)', () =
 
     it('requires fresh acknowledged relay OFF feedback newer than the request', () => {
         const requestedAt = start + 35_000;
-        expect(isPvRelayOffConfirmed(false, requestedAt + 1000, true, true, requestedAt, requestedAt + 2000, ageMs)).to.equal(true);
-        expect(isPvRelayOffConfirmed(false, requestedAt, true, true, requestedAt, requestedAt + 2000, ageMs)).to.equal(false);
-        expect(isPvRelayOffConfirmed(false, requestedAt + 1000, false, true, requestedAt, requestedAt + 2000, ageMs)).to.equal(false);
+        expect(
+            isPvRelayOffConfirmed(false, requestedAt + 1000, true, true, requestedAt, requestedAt + 2000, ageMs),
+        ).to.equal(true);
+        expect(isPvRelayOffConfirmed(false, requestedAt, true, true, requestedAt, requestedAt + 2000, ageMs)).to.equal(
+            false,
+        );
+        expect(
+            isPvRelayOffConfirmed(false, requestedAt + 1000, false, true, requestedAt, requestedAt + 2000, ageMs),
+        ).to.equal(false);
     });
 
     it('confirms relay power loss only after three distinct near-zero samples', () => {

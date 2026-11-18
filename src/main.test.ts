@@ -282,7 +282,6 @@ describe('PV restart lock persistent diagnostics (no hardware)', () => {
     }
 });
 
-
 describe('PV restart remains locked after interrupted diagnostic persistence (no hardware)', () => {
     for (const minerId of ['s9', 's19']) {
         it(`keeps ${minerId} locked when restoration and diagnostic writes fail`, async () => {
@@ -794,14 +793,15 @@ describe('custom feature notifications', () => {
     });
 });
 
-
 describe('PV VIS integration: two miners and lost relay feedback (no hardware)', () => {
     it('updates both miners through real monitor cycles, fails closed on S19 loss, and never unlocks', async () => {
         const adapter = createTestAdapter() as unknown as {
             config: Record<string, unknown>;
             getDevicesAsync: () => Promise<ioBroker.DeviceObject[]>;
             getForeignStateAsync: (id: string) => Promise<{
-                val: number | boolean; ack: boolean; ts: number;
+                val: number | boolean;
+                ack: boolean;
+                ts: number;
             } | null>;
             getStateAsync: (id: string) => Promise<{ val: unknown } | null>;
             setState: (id: string, state: { val: unknown; ack: boolean }) => Promise<void>;
@@ -819,7 +819,7 @@ describe('PV VIS integration: two miners and lost relay feedback (no hardware)',
             ['pv.battery', { val: 0, ack: true, ts: now }],
         ]);
         const writes = new Map<string, unknown>();
-        const devices = (['s9', 's19'] as const).map((id) => ({
+        const devices = (['s9', 's19'] as const).map(id => ({
             _id: `miner.0.miner.${id}`,
             native: {
                 category: 'miner',
@@ -845,7 +845,9 @@ describe('PV VIS integration: two miners and lost relay feedback (no hardware)',
         adapter.getDevicesAsync = async () => devices;
         adapter.getForeignStateAsync = async id => foreign.get(id) ?? null;
         adapter.getStateAsync = async id => {
-            if (!id.endsWith('.lastSafeStop')) return null;
+            if (!id.endsWith('.lastSafeStop')) {
+                return null;
+            }
             const minerId = id.includes('miner.s9.') ? 's9' : 's19';
             return {
                 val: JSON.stringify({
@@ -892,7 +894,6 @@ describe('PV VIS integration: two miners and lost relay feedback (no hardware)',
     });
 });
 
-
 describe('PV diagnostics after adapter restart and interrupted monitoring (no hardware)', () => {
     it('reinitializes S9 and S19 VIS diagnostics as locked, without trusting old displayed values', async () => {
         const adapter = createTestAdapter() as unknown as {
@@ -912,7 +913,9 @@ describe('PV diagnostics after adapter restart and interrupted monitoring (no ha
         adapter.config.checkForUpdates = false;
         adapter.restorePvStopDiagnostics = async () => {};
         adapter.minerManager = {
-            init: async () => { throw new Error('simulated offline miner'); },
+            init: async () => {
+                throw new Error('simulated offline miner');
+            },
             getMiners: () => [],
         };
         adapter.createDeviceStateObjects = async () => {};
@@ -920,7 +923,9 @@ describe('PV diagnostics after adapter restart and interrupted monitoring (no ha
         adapter.extendObject = async () => {};
         adapter.getStateAsync = async () => null;
         adapter.setStateChangedAsync = async () => {};
-        adapter.setState = async (id, state) => { writes.set(id, state.val); };
+        adapter.setState = async (id, state) => {
+            writes.set(id, state.val);
+        };
         for (const id of ['s9', 's19']) {
             const prefix = `pvControl.miners.miner.${id}`;
             // Simulate VIS values persisted from the previous adapter process.
@@ -931,7 +936,9 @@ describe('PV diagnostics after adapter restart and interrupted monitoring (no ha
             await adapter.initDevice({
                 _id: `miner.0.miner.${id}`,
                 native: {
-                    category: 'miner', name: id, enabled: true,
+                    category: 'miner',
+                    name: id,
+                    enabled: true,
                     settings: { id, minerType: 'bos', host: 'localhost' },
                     pvControl: { enabled: true },
                 },
@@ -959,35 +966,61 @@ describe('PV diagnostics after adapter restart and interrupted monitoring (no ha
         const writes = new Map<string, unknown>();
         let failFeedback = false;
         adapter.config = {
-            pvMaxDataAge: 15, pvGridPowerId: 'pv.grid', pvBatteryPowerId: 'pv.battery', pvReserve: 200,
+            pvMaxDataAge: 15,
+            pvGridPowerId: 'pv.grid',
+            pvBatteryPowerId: 'pv.battery',
+            pvReserve: 200,
         };
-        adapter.getDevicesAsync = async () => [{
-            _id: 'miner.0.miner.s19',
-            native: {
-                category: 'miner', name: 's19', settings: { id: 's19', minerType: 'bosMiner' },
-                pvControl: {
-                    enabled: true, relayStateId: 'relay.s19', relayOnValue: true,
-                    powerStateId: 'power.s19', restartDelay: 180, minPower: 1800,
+        adapter.getDevicesAsync = async () => [
+            {
+                _id: 'miner.0.miner.s19',
+                native: {
+                    category: 'miner',
+                    name: 's19',
+                    settings: { id: 's19', minerType: 'bosMiner' },
+                    pvControl: {
+                        enabled: true,
+                        relayStateId: 'relay.s19',
+                        relayOnValue: true,
+                        powerStateId: 'power.s19',
+                        restartDelay: 180,
+                        minPower: 1800,
+                    },
                 },
-            },
-        } as unknown as ioBroker.DeviceObject];
+            } as unknown as ioBroker.DeviceObject,
+        ];
         adapter.getForeignStateAsync = async id => {
             if (id === 'relay.s19') {
-                if (failFeedback) throw new Error('simulated Sonoff timeout');
+                if (failFeedback) {
+                    throw new Error('simulated Sonoff timeout');
+                }
                 return { val: false, ack: true, ts: now };
             }
-            if (id === 'power.s19') return { val: 0, ack: true, ts: now };
-            if (id === 'pv.grid') return { val: -4500, ack: true, ts: now };
-            if (id === 'pv.battery') return { val: 0, ack: true, ts: now };
+            if (id === 'power.s19') {
+                return { val: 0, ack: true, ts: now };
+            }
+            if (id === 'pv.grid') {
+                return { val: -4500, ack: true, ts: now };
+            }
+            if (id === 'pv.battery') {
+                return { val: 0, ack: true, ts: now };
+            }
             return null;
         };
-        adapter.getStateAsync = async id => id === `${prefix}.lastSafeStop`
-            ? { val: JSON.stringify({
-                minerId: 's19', relayStateId: 'relay.s19',
-                stoppedAt: now - 60_000, relayOffConfirmed: true,
-            }) }
-            : null;
-        adapter.setState = async (id, state) => { writes.set(id, state.val); };
+        adapter.getStateAsync = async id =>
+            id === `${prefix}.lastSafeStop`
+                ? {
+                      val: JSON.stringify({
+                          minerId: 's19',
+                          relayStateId: 'relay.s19',
+                          stoppedAt: now - 60_000,
+                          relayOffConfirmed: true,
+                      }),
+                  }
+                : null;
+        adapter.setState = async (id, state) => {
+            writes.set(id, state.val);
+        };
         adapter.pvRelayOffMiners.add('s19');
 
         await adapter.runPvMonitor();
@@ -1020,9 +1053,15 @@ describe('PV S9/S19 real MinerManager command interlock (mocked miners)', () => 
         for (const id of ['s9', 's19', 'other']) {
             miners.push({
                 settings: { id },
-                start: async () => { calls.push(`${id}.start`); },
-                setProfile: async () => { calls.push(`${id}.profile`); },
-                setPowerTarget: async () => { calls.push(`${id}.power`); },
+                start: async () => {
+                    calls.push(`${id}.start`);
+                },
+                setProfile: async () => {
+                    calls.push(`${id}.profile`);
+                },
+                setPowerTarget: async () => {
+                    calls.push(`${id}.power`);
+                },
             } as unknown as { settings: { id: string } });
         }
         // Install fake miners in the real manager's private collection.
@@ -1078,19 +1117,29 @@ describe('PV ioBroker stateChange command interlock (mocked IO)', () => {
         for (const id of ['s9', 's19']) {
             adapter.minerManager.miners.push({
                 settings: { id },
-                start: async () => { calls.push(`${id}.start`); },
-                setProfile: async () => { calls.push(`${id}.profile`); },
-                setPowerTarget: async () => { calls.push(`${id}.power`); },
+                start: async () => {
+                    calls.push(`${id}.start`);
+                },
+                setProfile: async () => {
+                    calls.push(`${id}.profile`);
+                },
+                setPowerTarget: async () => {
+                    calls.push(`${id}.power`);
+                },
             });
         }
         // A command waiting behind a previous operation must check the guard
         // when it reaches the queue, not only when it is first requested.
         let release!: () => void;
-        const blocker = new Promise<void>(resolve => { release = resolve; });
+        const blocker = new Promise<void>(resolve => {
+            release = resolve;
+        });
         const manager = adapter.minerManager as typeof adapter.minerManager & {
             withExclusiveMiner: (id: string, fn: () => Promise<void>) => Promise<void>;
         };
-        const active = manager.withExclusiveMiner('s9', async () => { await blocker; });
+        const active = manager.withExclusiveMiner('s9', async () => {
+            await blocker;
+        });
         const queued = [
             adapter.minerManager.startMiner('s9'),
             adapter.minerManager.setProfile('s9', 'normal'),
@@ -1102,7 +1151,11 @@ describe('PV ioBroker stateChange command interlock (mocked IO)', () => {
         await active;
         for (const promise of queued) {
             let failure: unknown;
-            try { await promise; } catch (error) { failure = error; }
+            try {
+                await promise;
+            } catch (error) {
+                failure = error;
+            }
             expect(String(failure)).to.include('command blocked by PV safe stop');
         }
         for (const operation of [
@@ -1111,7 +1164,11 @@ describe('PV ioBroker stateChange command interlock (mocked IO)', () => {
             () => adapter.minerManager.setPowerTarget('s19', 1800),
         ]) {
             let failure: unknown;
-            try { await operation(); } catch (error) { failure = error; }
+            try {
+                await operation();
+            } catch (error) {
+                failure = error;
+            }
             expect(String(failure)).to.include('command blocked by PV safe stop');
         }
         expect(calls).to.deep.equal([]);
@@ -1134,23 +1191,32 @@ describe('PV direct ioBroker control state interlock (mocked IO)', () => {
             const calls: string[] = [];
             adapter.minerManager.miners.push({
                 settings: { id: minerId },
-                start: async () => { calls.push('start'); },
-                setProfile: async () => { calls.push('profile'); },
-                setPowerTarget: async () => { calls.push('powerTarget'); },
+                start: async () => {
+                    calls.push('start');
+                },
+                setProfile: async () => {
+                    calls.push('profile');
+                },
+                setPowerTarget: async () => {
+                    calls.push('powerTarget');
+                },
             });
             adapter.pvRelayOffMiners.add(minerId);
-            adapter.getObjectAsync = async id => id.endsWith('.control.powerTarget')
-                ? { common: { min: 100, max: 3000 } }
-                : {
-                    native: {
-                        category: 'miner',
-                        name: minerId,
-                        settings: { id: minerId, minerType: 'bosMiner' },
-                    },
-                };
+            adapter.getObjectAsync = async id =>
+                id.endsWith('.control.powerTarget')
+                    ? { common: { min: 100, max: 3000 } }
+                    : {
+                          native: {
+                              category: 'miner',
+                              name: minerId,
+                              settings: { id: minerId, minerType: 'bosMiner' },
+                          },
+                      };
             adapter.getStateAsync = async () => ({ val: true });
             const acknowledgements: string[] = [];
-            adapter.setState = async id => { acknowledgements.push(id); };
+            adapter.setState = async id => {
+                acknowledgements.push(id);
+            };
             for (const [feature, value] of [
                 ['running', true],
                 ['profile', 'normal'],
@@ -1194,17 +1260,27 @@ describe('PV direct powerTarget guard before manager dispatch (mocked IO)', () =
         };
         let dispatched = 0;
         adapter.pvRelayOffMiners.add('s9');
-        adapter.getObjectAsync = async id => id.endsWith('.control.powerTarget')
-            ? { common: { min: 100, max: 3000 } }
-            : { native: {
-                category: 'miner', name: 'S9',
-                settings: { id: 's9', minerType: 'bosMiner' },
-            } };
+        adapter.getObjectAsync = async id =>
+            id.endsWith('.control.powerTarget')
+                ? { common: { min: 100, max: 3000 } }
+                : {
+                      native: {
+                          category: 'miner',
+                          name: 'S9',
+                          settings: { id: 's9', minerType: 'bosMiner' },
+                      },
+                  };
         adapter.getStateAsync = async () => ({ val: true });
-        adapter.setState = async () => { throw new Error('blocked command must not be acknowledged'); };
-        adapter.minerManager.setPowerTarget = async () => { dispatched++; };
+        adapter.setState = async () => {
+            throw new Error('blocked command must not be acknowledged');
+        };
+        adapter.minerManager.setPowerTarget = async () => {
+            dispatched++;
+        };
         await adapter.onStateChange('miner.0.miner.s9.control.powerTarget', {
-            val: 800, ack: false, ts: Date.now(),
+            val: 800,
+            ack: false,
+            ts: Date.now(),
         } as ioBroker.State);
         expect(dispatched).to.equal(0);
         expect(adapter.pvRelayOffMiners.has('s9')).to.equal(true);
@@ -1253,25 +1329,28 @@ describe('PV dual-miner changing-surplus monitor (read-only mocked IO)', () => {
             pvS9ActualPowerId: 'power.s9',
             pvS19ActualPowerId: 'power.s19',
         };
-        adapter.getDevicesAsync = async () => (['s9', 's19'] as const).map(id => ({
-            _id: `miner.0.miner.${id}`,
-            native: {
-                category: 'miner',
-                name: id,
-                settings: { id, minerType: 'bosMiner' },
-                pvControl: {
-                    enabled: true,
-                    relayStateId: `relay.${id}`,
-                    powerStateId: `power.${id}`,
-                    relayOnValue: true,
-                    restartDelay: 180,
-                    minPower: id === 's9' ? 500 : 1800,
+        adapter.getDevicesAsync = async () =>
+            (['s9', 's19'] as const).map(id => ({
+                _id: `miner.0.miner.${id}`,
+                native: {
+                    category: 'miner',
+                    name: id,
+                    settings: { id, minerType: 'bosMiner' },
+                    pvControl: {
+                        enabled: true,
+                        relayStateId: `relay.${id}`,
+                        powerStateId: `power.${id}`,
+                        relayOnValue: true,
+                        restartDelay: 180,
+                        minPower: id === 's9' ? 500 : 1800,
+                    },
                 },
-            },
-        })) as unknown as ioBroker.DeviceObject[];
+            })) as unknown as ioBroker.DeviceObject[];
         adapter.getForeignStateAsync = async id => sensors.get(id) ?? null;
         adapter.getStateAsync = async () => null;
-        adapter.setState = async (id, state) => { writes.set(id, state.val); };
+        adapter.setState = async (id, state) => {
+            writes.set(id, state.val);
+        };
         adapter.setForeignStateAsync = async () => {
             throw new Error('PV monitor must never write an actuator state');
         };
@@ -1329,7 +1408,12 @@ describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
     type StopHarness = {
         safeStopPvMiner: (settings: StopSettings) => Promise<void>;
         config: { pvEnabled: boolean; pvMaxDataAge: number };
-        minerManager: { withExclusiveMiner: (id: string, fn: (miner: { stop: () => Promise<void> }) => Promise<void>) => Promise<void> };
+        minerManager: {
+            withExclusiveMiner: (
+                id: string,
+                fn: (miner: { stop: () => Promise<void> }) => Promise<void>,
+            ) => Promise<void>;
+        };
         getDeviceObjectId: (settings: StopSettings) => string;
         getForeignStateAsync: (id: string) => Promise<{ val: boolean; ts: number; ack: boolean }>;
         getStateAsync: (id: string) => Promise<{ val: number; ts: number }>;
@@ -1343,14 +1427,19 @@ describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
         adapter.config = { pvEnabled: true, pvMaxDataAge: 180 };
         adapter.getDeviceObjectId = () => 'S9';
         adapter.minerManager = {
-            withExclusiveMiner: async (_id, fn) => fn({
-                stop: async () => { commands.push('pause'); },
-            }),
+            withExclusiveMiner: async (_id, fn) =>
+                fn({
+                    stop: async () => {
+                        commands.push('pause');
+                    },
+                }),
         };
         adapter.getForeignStateAsync = async () => ({ val: true, ts: Date.now(), ack: true });
         adapter.getStateAsync = async () => ({ val: 0, ts: Date.now() });
         adapter.readFreshPvMeasurement = async () => ({ value: 0, timestamp: Date.now() });
-        adapter.setForeignStateAsync = async () => { commands.push('relay.off'); };
+        adapter.setForeignStateAsync = async () => {
+            commands.push('relay.off');
+        };
         const settings = {
             name: 'S9',
             settings: { id: 'S9', minerType: 'bosMiner' },
@@ -1380,7 +1469,9 @@ describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
         const persisted = new Map<string, string>();
         try {
             Date.now = () => clock;
-            harness.delay = async ms => { clock += ms; };
+            harness.delay = async ms => {
+                clock += ms;
+            };
             harness.getStateAsync = async id => ({
                 val: id.endsWith('lastSeen') ? clock : 0,
                 ts: clock,
@@ -1419,7 +1510,8 @@ describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
             expect(clock - offAt!).to.be.at.least(390_000);
             expect(persisted.size).to.equal(1);
             const record = JSON.parse([...persisted.values()][0]) as {
-                minerId: string; relayOffConfirmed: boolean;
+                minerId: string;
+                relayOffConfirmed: boolean;
             };
             expect(record.minerId).to.equal('S9');
             expect(record.relayOffConfirmed).to.equal(true);
@@ -1433,10 +1525,16 @@ describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
     /**
      * Drives the real adapter method with virtual time. The mock only supplies
      * sensor/relay IO; it does not reproduce the shutdown decision logic.
+     *
+     * @param scenario
      */
     async function runFailureScenario(
-        scenario: 'relay-stays-on' | 'high-power-after-off' | 'miner-communication-loss' |
-            'adapter-unload' | 'pre-off-timeout',
+        scenario:
+            | 'relay-stays-on'
+            | 'high-power-after-off'
+            | 'miner-communication-loss'
+            | 'adapter-unload'
+            | 'pre-off-timeout',
     ): Promise<{ commands: string[]; error: string; locked: boolean; records: number }> {
         const { adapter, settings, commands } = setup();
         const harness = adapter as StopHarness & {
@@ -1472,9 +1570,14 @@ describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
                 const index = Math.floor(elapsed / 130_000);
                 const timestamp = index === 0 ? origin - 1 : origin + index * 130_000;
                 return {
-                    value: scenario === 'pre-off-timeout' ? 900 :
-                        offAt !== undefined && scenario === 'high-power-after-off' ? 900 :
-                            offAt === undefined ? 50 : 0,
+                    value:
+                        scenario === 'pre-off-timeout'
+                            ? 900
+                            : offAt !== undefined && scenario === 'high-power-after-off'
+                              ? 900
+                              : offAt === undefined
+                                ? 50
+                                : 0,
                     timestamp,
                 };
             };
@@ -1488,7 +1591,9 @@ describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
                 commands.push('relay.off');
                 offAt = clock;
             };
-            harness.setState = async () => { records++; };
+            harness.setState = async () => {
+                records++;
+            };
             harness.extendObject = async () => {};
 
             let error = '';
@@ -1547,12 +1652,13 @@ describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
 
     it('never issues relay OFF when the miner pause command fails', async () => {
         const { adapter, settings, commands } = setup();
-        adapter.minerManager.withExclusiveMiner = async (_id, fn) => fn({
-            stop: async () => {
-                commands.push('pause');
-                throw new Error('S9 pause rejected');
-            },
-        });
+        adapter.minerManager.withExclusiveMiner = async (_id, fn) =>
+            fn({
+                stop: async () => {
+                    commands.push('pause');
+                    throw new Error('S9 pause rejected');
+                },
+            });
         try {
             await adapter.safeStopPvMiner(settings);
             expect.fail('Expected safe stop to reject');
@@ -1582,7 +1688,7 @@ describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
         const invalid = {
             ...settings,
             settings: { ...settings.settings, minerType: 'cgMiner' },
-        } as unknown as StopSettings;
+        };
         try {
             await adapter.safeStopPvMiner(invalid);
             expect.fail('Expected safe stop to reject');

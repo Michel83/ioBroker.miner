@@ -28,7 +28,7 @@ describe('PV restart interruption simulation (no hardware)', () => {
                     return Promise.resolve();
                 },
             } as unknown as ReturnType<MinerManager['getMiners']>[number];
-            (manager as unknown as { miners: typeof miner[] }).miners.push(miner);
+            (manager as unknown as { miners: (typeof miner)[] }).miners.push(miner);
         }
         manager.setCommandGuard(id => !locks.has(id));
         return { manager, locks, calls };
@@ -45,24 +45,26 @@ describe('PV restart interruption simulation (no hardware)', () => {
             entered = resolve;
         });
         let restarting = false;
-        const attempt = manager.withExclusiveMiner('s9', async () => {
-            await executePvStartup({
-                mayPowerOn: () => Promise.resolve(true),
-                powerOnRelay: async () => {
-                    entered();
-                    await relayRequest;
-                },
-                awaitReadiness: () => Promise.resolve(ready()),
-                mayStartMining: () => Promise.resolve(!restarting),
-                startMining: () => {
-                    calls.push('unexpected-start');
-                    return Promise.resolve();
-                },
-            });
-        }).then(
-            () => false,
-            () => true,
-        );
+        const attempt = manager
+            .withExclusiveMiner('s9', async () => {
+                await executePvStartup({
+                    mayPowerOn: () => Promise.resolve(true),
+                    powerOnRelay: async () => {
+                        entered();
+                        await relayRequest;
+                    },
+                    awaitReadiness: () => Promise.resolve(ready()),
+                    mayStartMining: () => Promise.resolve(!restarting),
+                    startMining: () => {
+                        calls.push('unexpected-start');
+                        return Promise.resolve();
+                    },
+                });
+            })
+            .then(
+                () => false,
+                () => true,
+            );
         await enteredRelayRequest;
         restarting = true;
         powerOn();
@@ -70,7 +72,12 @@ describe('PV restart interruption simulation (no hardware)', () => {
         // New adapter instance recreates PV locks before accepting commands.
         const restoredLocks = new Set(['s9', 's19']);
         manager.setCommandGuard(id => !restoredLocks.has(id));
-        expect(await manager.startMiner('s9').then(() => false, () => true)).to.equal(true);
+        expect(
+            await manager.startMiner('s9').then(
+                () => false,
+                () => true,
+            ),
+        ).to.equal(true);
         expect(locks.has('s9')).to.equal(true);
         expect(restoredLocks.has('s19')).to.equal(true);
         expect(calls).to.deep.equal([]);
@@ -93,7 +100,12 @@ describe('PV restart interruption simulation (no hardware)', () => {
                 },
             }),
         );
-        expect(await attempt.then(() => false, () => true)).to.equal(true);
+        expect(
+            await attempt.then(
+                () => false,
+                () => true,
+            ),
+        ).to.equal(true);
         expect(calls).to.deep.equal(['relay-on-request']);
         expect(locks.has('s9')).to.equal(true);
         expect(locks.has('s19')).to.equal(true);
@@ -116,7 +128,12 @@ describe('PV restart interruption simulation (no hardware)', () => {
                 },
             }),
         );
-        expect(await attempt.then(() => false, () => true)).to.equal(true);
+        expect(
+            await attempt.then(
+                () => false,
+                () => true,
+            ),
+        ).to.equal(true);
         expect(locks.has('s19')).to.equal(true);
         expect(locks.has('s9')).to.equal(true);
         expect(calls).to.deep.equal(['relay-on-request', 'miner-start-request']);

@@ -19,13 +19,15 @@ describe('PV S9 two-phase shutdown sequence (fake hardware)', () => {
     const timing = getPvShutdownTiming(180, 90);
     const ageMs = 180_000;
 
-    function simulate(options: {
-        missingPreSample?: boolean;
-        staleRelayFeedback?: boolean;
-        highPrePower?: boolean;
-        missingPostSample?: boolean;
-        relayFeedbackLostAfterOff?: boolean;
-    } = {}): { commands: string[]; stopped: boolean; locked: boolean } {
+    function simulate(
+        options: {
+            missingPreSample?: boolean;
+            staleRelayFeedback?: boolean;
+            highPrePower?: boolean;
+            missingPostSample?: boolean;
+            relayFeedbackLostAfterOff?: boolean;
+        } = {},
+    ): { commands: string[]; stopped: boolean; locked: boolean } {
         const commands: string[] = [];
         const lockedMiners = new Set<string>();
         const activeStops = new Set<string>(['S9']);
@@ -40,24 +42,37 @@ describe('PV S9 two-phase shutdown sequence (fake hardware)', () => {
             const reading = Math.floor(elapsed / gapMs);
             const powerAt = reading === 0 ? pausedAt - 1 : start + reading * gapMs;
             const missing = options.missingPreSample && reading === 2;
-            const safe = pre.update({
-                hashrate: 0,
-                hashrateTimestamp: now,
-                power: options.highPrePower ? 800 : missing ? undefined : 50,
-                powerTimestamp: missing ? undefined : powerAt,
-                lastSeen: now,
-            }, now, ageMs, pausedAt, 30_000, 10_000, timing.powerSampleGapMs);
+            const safe = pre.update(
+                {
+                    hashrate: 0,
+                    hashrateTimestamp: now,
+                    power: options.highPrePower ? 800 : missing ? undefined : 50,
+                    powerTimestamp: missing ? undefined : powerAt,
+                    lastSeen: now,
+                },
+                now,
+                ageMs,
+                pausedAt,
+                30_000,
+                10_000,
+                timing.powerSampleGapMs,
+            );
             if (!safe) {
                 continue;
             }
             // Final check must still use fresh post-pause evidence.
-            const finalSafe = isPvShutdownSafe({
-                hashrate: 0,
-                hashrateTimestamp: now,
-                power: options.highPrePower ? 800 : 50,
-                powerTimestamp: powerAt,
-                lastSeen: now,
-            }, now, timing.powerSampleGapMs, pausedAt);
+            const finalSafe = isPvShutdownSafe(
+                {
+                    hashrate: 0,
+                    hashrateTimestamp: now,
+                    power: options.highPrePower ? 800 : 50,
+                    powerTimestamp: powerAt,
+                    lastSeen: now,
+                },
+                now,
+                timing.powerSampleGapMs,
+                pausedAt,
+            );
             if (finalSafe) {
                 offAt = now;
                 lockedMiners.add('S9');
@@ -67,7 +82,11 @@ describe('PV S9 two-phase shutdown sequence (fake hardware)', () => {
         }
 
         if (offAt === undefined) {
-            return { commands, stopped: false, locked: !isPvMinerCommandAllowed('S9', activeStops, lockedMiners, false) };
+            return {
+                commands,
+                stopped: false,
+                locked: !isPvMinerCommandAllowed('S9', activeStops, lockedMiners, false),
+            };
         }
 
         const post = new PvRelayOffPowerConfirmation(offAt);
@@ -78,13 +97,20 @@ describe('PV S9 two-phase shutdown sequence (fake hardware)', () => {
             const powerAt = reading === 0 ? offAt - 1 : offAt + reading * gapMs;
             const relayAt = options.staleRelayFeedback ? offAt : now;
             const relayOk = isPvRelayOffConfirmed(
-                false, relayAt, !options.relayFeedbackLostAfterOff, true, offAt, now, ageMs,
+                false,
+                relayAt,
+                !options.relayFeedbackLostAfterOff,
+                true,
+                offAt,
+                now,
+                ageMs,
             );
             const power = options.missingPostSample && reading >= 2 ? undefined : 0;
             if (post.update(power, powerAt, relayOk, now, ageMs)) {
                 // Revalidate relay feedback immediately before recording stop.
-                if (isPvRelayOffConfirmed(false, relayAt, !options.relayFeedbackLostAfterOff,
-                    true, offAt, now, ageMs)) {
+                if (
+                    isPvRelayOffConfirmed(false, relayAt, !options.relayFeedbackLostAfterOff, true, offAt, now, ageMs)
+                ) {
                     stopped = true;
                     commands.push('stop.confirmed');
                     break;

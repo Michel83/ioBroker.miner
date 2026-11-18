@@ -10,15 +10,20 @@ describe('PV S9 shutdown with delayed Sonoff telemetry (simulation only)', () =>
     const pausedAt = start - 1000;
     const ageMs = 180_000;
     const sample = (at: number, powerAt = at, power = 75): PvShutdownMeasurements => ({
-        hashrate: 0, hashrateTimestamp: at,
-        power, powerTimestamp: powerAt, lastSeen: at,
+        hashrate: 0,
+        hashrateTimestamp: at,
+        power,
+        powerTimestamp: powerAt,
+        lastSeen: at,
     });
 
     it('does not confirm S9 stopped from stale pre-pause power even if hashrate is zero', () => {
         const check = new PvShutdownConfirmation();
         for (let seconds = 0; seconds <= 150; seconds += 5) {
             const at = start + seconds * 1000;
-            expect(check.update(sample(at, pausedAt - 1), at, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(false);
+            expect(check.update(sample(at, pausedAt - 1), at, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(
+                false,
+            );
         }
     });
 
@@ -34,10 +39,13 @@ describe('PV S9 shutdown with delayed Sonoff telemetry (simulation only)', () =>
         const check = new PvShutdownConfirmation();
         const delayed = start + 130_000;
         expect(check.update(sample(delayed), delayed, ageMs, pausedAt, 30_000, 20_000, 180_000)).to.equal(false);
-        expect(check.update(sample(delayed + 15_000), delayed + 15_000, ageMs, pausedAt, 30_000, 20_000, 180_000)).to.equal(false);
-        expect(check.update(sample(delayed + 30_000), delayed + 30_000, ageMs, pausedAt, 30_000, 20_000, 180_000)).to.equal(true);
+        expect(
+            check.update(sample(delayed + 15_000), delayed + 15_000, ageMs, pausedAt, 30_000, 20_000, 180_000),
+        ).to.equal(false);
+        expect(
+            check.update(sample(delayed + 30_000), delayed + 30_000, ageMs, pausedAt, 30_000, 20_000, 180_000),
+        ).to.equal(true);
     });
-
 
     it('fails closed if S9 power updates arrive 130 seconds apart while the current confirmation window is 10 seconds', () => {
         const check = new PvShutdownConfirmation();
@@ -74,7 +82,9 @@ describe('PV S9 shutdown with delayed Sonoff telemetry (simulation only)', () =>
         expect(check.update(sample(first), first, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(false);
         const stale = first + 185_000;
         expect(check.update(sample(stale, first), stale, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(false);
-        expect(check.update(sample(stale + 5_000), stale + 5_000, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(false);
+        expect(check.update(sample(stale + 5_000), stale + 5_000, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(
+            false,
+        );
     });
 
     it('rejects a final S9 relay-off check if power becomes high again', () => {

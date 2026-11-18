@@ -13,10 +13,23 @@ export class PvTargetDiagnosticV243 {
         }
     >();
 
+    /**
+     *
+     * @param miner
+     */
     public reset(miner: PvMinerKindV243): void {
         this.history.delete(miner);
     }
 
+    /**
+     *
+     * @param input
+     * @param input.miner
+     * @param input.currentTargetWatts
+     * @param input.effectiveGridWatts
+     * @param input.batteryPowerWatts
+     * @param input.now
+     */
     public evaluate(input: {
         miner: PvMinerKindV243;
         currentTargetWatts: number;

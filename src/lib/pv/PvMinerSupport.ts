@@ -4,6 +4,8 @@
  * This is only a preliminary capability check.
  * Actual relay shutdown additionally requires fresh hashrate,
  * fresh power measurements and stable shutdown confirmation.
+ *
+ * @param minerType
  */
 export function supportsPvSafeStop(minerType: string): boolean {
     return ['bosMiner', 'bos', 'xmRig', 'iceRiverOcMiner'].includes(minerType);

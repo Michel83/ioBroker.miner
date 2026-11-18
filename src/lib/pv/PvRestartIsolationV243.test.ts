@@ -44,8 +44,7 @@ describe('V2.43 dual-miner PV monitor restart isolation', () => {
             reserveWatts: 200,
             proposals,
         });
-        expect(result.s19).to.include({ action: 'hold',
-            reason: 's19-initial-observation' });
+        expect(result.s19).to.include({ action: 'hold', reason: 's19-initial-observation' });
     });
     it('resets both miners after invalid measurements and starts S19 observation anew', () => {
         const diagnostic = new PvTargetDiagnosticV243();
@@ -54,7 +53,6 @@ describe('V2.43 dual-miner PV monitor restart isolation', () => {
         diagnostic.reset('S9');
         diagnostic.reset('S19');
         const restored = diagnostic.evaluate(input('S19', now + 600_000));
-        expect(restored).to.include({ action: 'hold',
-            reason: 's19-initial-observation' });
+        expect(restored).to.include({ action: 'hold', reason: 's19-initial-observation' });
     });
 });
