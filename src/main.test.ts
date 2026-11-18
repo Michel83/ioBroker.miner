@@ -1211,6 +1211,103 @@ describe('PV direct powerTarget guard before manager dispatch (mocked IO)', () =
     });
 });
 
+describe('PV dual-miner changing-surplus monitor (read-only mocked IO)', () => {
+    it('updates S9/S19 diagnostics across export, battery charging, import and stale telemetry without actuator writes', async () => {
+        const adapter = createTestAdapter() as unknown as {
+            config: Record<string, unknown>;
+            getDevicesAsync: () => Promise<ioBroker.DeviceObject[]>;
+            getForeignStateAsync: (id: string) => Promise<{ val: number | boolean; ts: number; ack: boolean } | null>;
+            getStateAsync: (id: string) => Promise<{ val: unknown } | null>;
+            setState: (id: string, state: { val: unknown; ack: boolean }) => Promise<void>;
+            setForeignStateAsync: (id: string, value: unknown) => Promise<void>;
+            runPvMonitor: () => Promise<void>;
+            pvRelayOffMiners: Set<string>;
+        };
+        const writes = new Map<string, unknown>();
+        const now = Date.now();
+        const sensors = new Map<string, { val: number | boolean; ts: number; ack: boolean }>();
+        const put = (id: string, val: number | boolean, ts = now): void => {
+            sensors.set(id, { val, ts, ack: true });
+        };
+        for (const id of ['s9', 's19']) {
+            put(`relay.${id}`, false);
+            put(`power.${id}`, 0);
+            put(`running.${id}`, false);
+            put(`target.${id}`, id === 's9' ? 500 : 1800);
+        }
+        put('grid', -4000);
+        put('battery', -1000);
+        put('soc', 70);
+        adapter.config = {
+            pvEnabled: false,
+            pvMaxDataAge: 15,
+            pvInterval: 120,
+            pvGridPowerId: 'grid',
+            pvBatteryPowerId: 'battery',
+            pvBatterySocId: 'soc',
+            pvReserve: 200,
+            pvS9TargetStateId: 'target.s9',
+            pvS19TargetStateId: 'target.s19',
+            pvS9RunningStateId: 'running.s9',
+            pvS19RunningStateId: 'running.s19',
+            pvS9ActualPowerId: 'power.s9',
+            pvS19ActualPowerId: 'power.s19',
+        };
+        adapter.getDevicesAsync = async () => (['s9', 's19'] as const).map(id => ({
+            _id: `miner.0.miner.${id}`,
+            native: {
+                category: 'miner',
+                name: id,
+                settings: { id, minerType: 'bosMiner' },
+                pvControl: {
+                    enabled: true,
+                    relayStateId: `relay.${id}`,
+                    powerStateId: `power.${id}`,
+                    relayOnValue: true,
+                    restartDelay: 180,
+                    minPower: id === 's9' ? 500 : 1800,
+                },
+            },
+        })) as unknown as ioBroker.DeviceObject[];
+        adapter.getForeignStateAsync = async id => sensors.get(id) ?? null;
+        adapter.getStateAsync = async () => null;
+        adapter.setState = async (id, state) => { writes.set(id, state.val); };
+        adapter.setForeignStateAsync = async () => {
+            throw new Error('PV monitor must never write an actuator state');
+        };
+        adapter.pvRelayOffMiners.add('s9');
+        adapter.pvRelayOffMiners.add('s19');
+
+        await adapter.runPvMonitor();
+        expect(writes.get('pvControl.valid')).to.equal(true);
+        expect(writes.get('pvControl.surplus')).to.equal(3800);
+        expect(writes.get('pvControl.miners.miner.s9.restartLocked')).to.equal(true);
+        expect(writes.get('pvControl.miners.miner.s19.restartLocked')).to.equal(true);
+
+        put('grid', -1500);
+        put('battery', -800);
+        await adapter.runPvMonitor();
+        expect(writes.get('pvControl.surplus')).to.equal(1300);
+
+        put('grid', 600);
+        put('battery', 500);
+        await adapter.runPvMonitor();
+        expect(writes.get('pvControl.surplus')).to.equal(0);
+
+        // Stale grid data must invalidate both calculations, not reuse previous surplus.
+        put('grid', -4000, now - 60_000);
+        await adapter.runPvMonitor();
+        expect(writes.get('pvControl.valid')).to.equal(false);
+        expect(writes.get('pvControl.surplus')).to.equal(null);
+        expect(writes.get('pvControl.v243Available')).to.equal(null);
+        for (const id of ['s9', 's19']) {
+            expect(writes.get(`pvControl.miners.miner.${id}.restartLocked`)).to.equal(true);
+            expect(adapter.pvRelayOffMiners.has(id)).to.equal(true);
+        }
+        expect(writes.get('pvControl.status')).to.equal('Missing or stale PV measurements; no commands sent');
+    });
+});
+
 /**
  * Direct tests of the actual private safeStopPvMiner method using a controller-free
  * adapter. No real miner, Sonoff relay, or ioBroker instance is contacted.
