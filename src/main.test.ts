@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { resetTimerBackend } from './lib/utils/delay';
 import { MinerFeatureKey } from './lib/miner/model/MinerFeature';
 import type { MinerAdapter } from './main';
+import type { IOBrokerMinerSettings } from './miner/model/IOBrokerMinerSettings';
 import type { ConfigItemAny, DeviceControl } from '@iobroker/dm-utils';
 import { BOS } from './lib/miner/miner/BOS';
 import { UpdateSources } from './lib/update/UpdateSources';
@@ -842,8 +843,8 @@ describe('PV VIS integration: two miners and lost relay feedback (no hardware)',
             pvBatteryPowerId: 'pv.battery',
             pvReserve: 200,
         };
-        adapter.getDevicesAsync = async () => devices;
-        adapter.getForeignStateAsync = async id => foreign.get(id) ?? null;
+        adapter.getDevicesAsync = () => Promise.resolve(devices);
+        adapter.getForeignStateAsync = id => Promise.resolve(foreign.get(id) ?? null);
         adapter.getStateAsync = async id => {
             if (!id.endsWith('.lastSafeStop')) {
                 return null;
@@ -1404,7 +1405,7 @@ describe('PV dual-miner changing-surplus monitor (read-only mocked IO)', () => {
  * adapter. No real miner, Sonoff relay, or ioBroker instance is contacted.
  */
 describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
-    type StopSettings = import('./miner/model/IOBrokerMinerSettings').IOBrokerMinerSettings;
+    type StopSettings = IOBrokerMinerSettings;
     type StopHarness = {
         safeStopPvMiner: (settings: StopSettings) => Promise<void>;
         config: { pvEnabled: boolean; pvMaxDataAge: number };
@@ -1434,9 +1435,9 @@ describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
                     },
                 }),
         };
-        adapter.getForeignStateAsync = async () => ({ val: true, ts: Date.now(), ack: true });
-        adapter.getStateAsync = async () => ({ val: 0, ts: Date.now() });
-        adapter.readFreshPvMeasurement = async () => ({ value: 0, timestamp: Date.now() });
+        adapter.getForeignStateAsync = () => Promise.resolve({ val: true, ts: Date.now(), ack: true });
+        adapter.getStateAsync = () => Promise.resolve({ val: 0, ts: Date.now() });
+        adapter.readFreshPvMeasurement = () => Promise.resolve({ value: 0, timestamp: Date.now() });
         adapter.setForeignStateAsync = async () => {
             commands.push('relay.off');
         };
