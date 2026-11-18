@@ -27,7 +27,7 @@ describe('V2.43 full-day PV regulation simulation (read-only)', () => {
             s9Running: boolean,
             s19Running: boolean,
             previous?: ReturnType<typeof evaluatePvRunEligibilityV243>,
-        ) =>
+        ): ReturnType<typeof evaluatePvRunEligibilityV243> =>
             evaluatePvRunEligibilityV243({
                 now: minute * 60_000,
                 hour,
@@ -95,7 +95,7 @@ describe('V2.43 full-day PV regulation simulation (read-only)', () => {
         const maxAgeMs = 120_000;
         const s9MeasuredAt = now - 130_000;
         const s19MeasuredAt = now - 10_000;
-        const fresh = (timestamp: number) => timestamp <= now && now - timestamp <= maxAgeMs;
+        const fresh = (timestamp: number): boolean => timestamp <= now && now - timestamp <= maxAgeMs;
         const proposal =
             fresh(s9MeasuredAt) && fresh(s19MeasuredAt)
                 ? coordinatePvTargetsV243({
