@@ -24,7 +24,7 @@ describe('PV full-day S9/S19 safety simulation (no hardware)', () => {
         relayAgeMs?: number;
         stopAgeMs?: number;
     };
-    const observe = (miner: (typeof miners)[number], input: Snapshot) => {
+    const observe = (miner: (typeof miners)[number], input: Snapshot): { locked: boolean; relayOn: boolean | null; countdown: number | null; reason: string } => {
         const now = start + input.minute * 60_000;
         const relayStateId = `sonoff.0.${miner.id}.POWER`;
         const relayTimestamp = now - (input.relayAgeMs ?? 0);
