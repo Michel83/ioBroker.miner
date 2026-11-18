@@ -81,7 +81,7 @@ describe('V2.43 pure power target regulation', () => {
             const input: PvTargetInputsV243 = {
                 ...base,
                 miner,
-                currentTargetWatts: miner === 'S9' ? 1000 : 1500,
+                currentTargetWatts: miner === 'S9' ? 1000 : 2100,
                 effectiveGridWatts: -1200,
                 batteryPowerWatts: 150,
             };
