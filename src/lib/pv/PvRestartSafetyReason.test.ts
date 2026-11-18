@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import { pvRestartSafetyReason } from './PvRestartSafetyReason';
 
 describe('PV restart reason diagnostics (read-only)', () => {
-    const ready = () => ({
+    const ready = (): Parameters<typeof pvRestartSafetyReason>[0] => ({
         locked: true,
         shuttingDown: false,
         relayOn: false as boolean | null,
