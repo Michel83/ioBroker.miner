@@ -36,6 +36,8 @@ import { evaluatePvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
 import type { PvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
 import type { PvMinerKindV243 } from './lib/pv/PvTargetRegulationV243';
 import { PvTargetDiagnosticV243 } from './lib/pv/PvTargetDiagnosticV243';
+import { coordinatePvTargetsV243 } from './lib/pv/PvDualMinerBudgetV243';
+import type { PvTargetDecisionV243 } from './lib/pv/PvTargetRegulationV243';
 import { UpdateSources } from './lib/update/UpdateSources';
 import { runUpdateChecks, type UpdateCheckSummary } from './lib/update/runUpdateChecks';
 import type { UpdateCheckContext, UpdateCheckResult } from './lib/miner/model/UpdateCheckResult';
@@ -1552,32 +1554,61 @@ export class MinerAdapter extends utils.Adapter {
                     : 'Missing, stale or invalid V2.43 input; commands locked',
                 ack: true,
             });
-            // Observe targets only; historical target changes are not proof of a miner restart.
+            // Read-only proposals: stabilize each miner first, then allocate one shared export budget.
+            // No path here issues miner commands or writes foreign actuator states.
+            const observedTargets: Partial<Record<PvMinerKindV243, number>> = {};
+            const proposals: Partial<Record<PvMinerKindV243, PvTargetDecisionV243>> = {};
             for (const miner of ['S9', 'S19'] as PvMinerKindV243[]) {
                 const targetId = miner === 'S9' ? this.config.pvS9TargetStateId : this.config.pvS19TargetStateId;
                 const currentTarget = await this.readFreshPvValue(targetId || '', ageMs);
                 if (!v243 || currentTarget === undefined) {
                     this.pvTargetDiagnostic.reset(miner);
+                    continue;
                 }
-                const decision =
-                    v243 && currentTarget !== undefined
-                        ? this.pvTargetDiagnostic.evaluate({
-                              miner,
-                              currentTargetWatts: currentTarget,
-                              effectiveGridWatts: v243.effectiveGridWatts,
-                              batteryPowerWatts: battery!,
-                              now: Date.now(),
-                          })
-                        : undefined;
+                observedTargets[miner] = currentTarget;
+                proposals[miner] = this.pvTargetDiagnostic.evaluate({
+                    miner,
+                    currentTargetWatts: currentTarget,
+                    effectiveGridWatts: v243.effectiveGridWatts,
+                    batteryPowerWatts: battery!,
+                    now: Date.now(),
+                });
+            }
+            const coordinated = v243 && grid !== undefined && battery !== undefined &&
+                observedTargets.S9 !== undefined && observedTargets.S19 !== undefined &&
+                proposals.S9 !== undefined && proposals.S19 !== undefined
+                ? coordinatePvTargetsV243({
+                    s9: {
+                        miner: 'S9',
+                        currentTargetWatts: observedTargets.S9,
+                        effectiveGridWatts: v243.effectiveGridWatts,
+                        batteryPowerWatts: battery,
+                        now: Date.now(),
+                    },
+                    s19: {
+                        miner: 'S19',
+                        currentTargetWatts: observedTargets.S19,
+                        effectiveGridWatts: v243.effectiveGridWatts,
+                        batteryPowerWatts: battery,
+                        now: Date.now(),
+                    },
+                    gridPowerWatts: v243.effectiveGridWatts,
+                    batteryPowerWatts: battery,
+                    reserveWatts: reserve,
+                    proposals: { s9: proposals.S9, s19: proposals.S19 },
+                })
+                : undefined;
+            for (const miner of ['S9', 'S19'] as PvMinerKindV243[]) {
                 const prefix = miner === 'S9' ? 's9' : 's19';
+                const decision = coordinated ? (miner === 'S9' ? coordinated.s9 : coordinated.s19) : undefined;
                 await this.setState(`pvControl.${prefix}SuggestedTarget`, {
                     val: decision?.action === 'set-target' ? (decision.targetWatts ?? null) : null,
                     ack: true,
                 });
                 await this.setState(`pvControl.${prefix}Decision`, {
                     val: decision
-                        ? `${decision.action}: ${decision.reason} (observed targets only; no commands)`
-                        : 'Unavailable: missing or stale target/PV measurement',
+                        ? `${decision.action}: ${decision.reason} (shared budget; observations only; no commands)`
+                        : 'Unavailable: missing or stale target/PV measurement for either miner',
                     ack: true,
                 });
             }
