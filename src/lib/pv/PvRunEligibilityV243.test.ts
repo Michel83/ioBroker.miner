@@ -150,7 +150,7 @@ describe('V2.43 read-only start and stop eligibility', () => {
             gridPowerWatts: number,
             s9TargetWatts = 1800,
             s9ActualWatts = 1300,
-        ) => {
+        ): ReturnType<typeof evaluatePvRunEligibilityV243> => {
             const result = evaluatePvRunEligibilityV243({
                 now: minute * 60_000,
                 hour,
