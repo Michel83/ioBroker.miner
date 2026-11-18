@@ -76,6 +76,34 @@ describe('V2.43 pure power target regulation', () => {
             }).reason,
         ).to.equal('s19-increase-stabilization');
     });
+    it('never increases S9 or S19 while the battery is discharging despite grid export', () => {
+        for (const miner of ['S9', 'S19'] as const) {
+            const input: PvTargetInputsV243 = {
+                ...base,
+                miner,
+                currentTargetWatts: miner === 'S9' ? 1000 : 1500,
+                effectiveGridWatts: -1200,
+                batteryPowerWatts: 150,
+            };
+            expect(decidePvTargetV243(input)).to.include({
+                action: 'hold',
+                reason: 'battery-discharging',
+            });
+            expect(decidePvTargetV243({ ...input, batteryPowerWatts: 0 }).action).to.equal(
+                miner === 'S9' ? 'set-target' : 'hold',
+            );
+            // Reducing load remains possible during discharge.
+            expect(decidePvTargetV243({ ...input, effectiveGridWatts: 300 }).action).to.equal('set-target');
+        }
+    });
+    it('keeps battery protection at S9 minimum and rejects invalid battery measurements', () => {
+        expect(decidePvTargetV243({
+            ...base, currentTargetWatts: 500, effectiveGridWatts: 200, batteryPowerWatts: 150,
+        }).reason).to.equal('s9-battery-protection');
+        expect(decidePvTargetV243({
+            ...base, effectiveGridWatts: -2000, batteryPowerWatts: NaN,
+        }).action).to.equal('hold');
+    });
     it('rejects invalid or missing measurements without a target command', () => {
         expect(decidePvTargetV243({ ...base, effectiveGridWatts: NaN }).action).to.equal('hold');
         expect(decidePvTargetV243({ ...base, currentTargetWatts: 1050 }).action).to.equal('hold');
