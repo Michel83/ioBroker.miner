@@ -13,10 +13,16 @@ describe('V2.43 dual-miner PV monitor restart isolation', () => {
         const oldProcess = new PvTargetDiagnosticV243();
         expect(oldProcess.evaluate(input('S19', now)).reason).to.equal('s19-initial-observation');
         expect(oldProcess.evaluate(input('S19', now + 180_000)).reason).to.equal('s19-increase-stabilization');
-        expect(oldProcess.evaluate(input('S19', now + 360_000)).reason).to.equal('s19-increase-stabilization');
+        expect(oldProcess.evaluate(input('S19', now + 359_999)).reason).to.equal('s19-increase-stabilization');
+        expect(oldProcess.evaluate(input('S19', now + 360_000))).to.include({
+            action: 'set-target', reason: 'increase-surplus',
+        });
         const freshProcess = new PvTargetDiagnosticV243();
         expect(freshProcess.evaluate(input('S19', now + 360_000))).to.include({
             action: 'hold', reason: 's19-initial-observation',
+        });
+        expect(freshProcess.evaluate(input('S19', now + 540_000))).to.include({
+            action: 'hold', reason: 's19-increase-stabilization',
         });
     });
     it('holds shared S19 increase immediately after restart despite previously sufficient export', () => {
