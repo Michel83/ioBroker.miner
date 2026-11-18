@@ -1009,7 +1009,7 @@ describe('PV diagnostics after adapter restart and interrupted monitoring (no ha
  * adapter. No real miner, Sonoff relay, or ioBroker instance is contacted.
  */
 describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
-    type StopSettings = Parameters<MinerAdapter['safeStopPvMiner']>[0];
+    type StopSettings = import('./miner/model/IOBrokerMinerSettings').IOBrokerMinerSettings;
     type StopHarness = {
         safeStopPvMiner: (settings: StopSettings) => Promise<void>;
         config: { pvEnabled: boolean; pvMaxDataAge: number };
