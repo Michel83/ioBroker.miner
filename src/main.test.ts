@@ -859,8 +859,9 @@ describe('PV VIS integration: two miners and lost relay feedback (no hardware)',
                 }),
             };
         };
-        adapter.setState = async (id, state) => {
+        adapter.setState = (id, state) => {
             writes.set(id, state.val);
+            return Promise.resolve();
         };
         adapter.pvRelayOffMiners.add('s9');
         adapter.pvRelayOffMiners.add('s19');
@@ -914,18 +915,17 @@ describe('PV diagnostics after adapter restart and interrupted monitoring (no ha
         adapter.config.checkForUpdates = false;
         adapter.restorePvStopDiagnostics = async () => {};
         adapter.minerManager = {
-            init: async () => {
-                throw new Error('simulated offline miner');
-            },
+            init: () => Promise.reject(new Error('simulated offline miner')),
             getMiners: () => [],
         };
         adapter.createDeviceStateObjects = async () => {};
         adapter.writeStaticInfoStates = async () => {};
         adapter.extendObject = async () => {};
-        adapter.getStateAsync = async () => null;
+        adapter.getStateAsync = () => Promise.resolve(null);
         adapter.setStateChangedAsync = async () => {};
-        adapter.setState = async (id, state) => {
+        adapter.setState = (id, state) => {
             writes.set(id, state.val);
+            return Promise.resolve();
         };
         for (const id of ['s9', 's19']) {
             const prefix = `pvControl.miners.miner.${id}`;
@@ -1019,8 +1019,9 @@ describe('PV diagnostics after adapter restart and interrupted monitoring (no ha
                       }),
                   }
                 : null;
-        adapter.setState = async (id, state) => {
+        adapter.setState = (id, state) => {
             writes.set(id, state.val);
+            return Promise.resolve();
         };
         adapter.pvRelayOffMiners.add('s19');
 
@@ -1213,7 +1214,7 @@ describe('PV direct ioBroker control state interlock (mocked IO)', () => {
                               settings: { id: minerId, minerType: 'bosMiner' },
                           },
                       };
-            adapter.getStateAsync = async () => ({ val: true });
+            adapter.getStateAsync = () => Promise.resolve({ val: true });
             const acknowledgements: string[] = [];
             adapter.setState = async id => {
                 acknowledgements.push(id);
@@ -1271,7 +1272,7 @@ describe('PV direct powerTarget guard before manager dispatch (mocked IO)', () =
                           settings: { id: 's9', minerType: 'bosMiner' },
                       },
                   };
-        adapter.getStateAsync = async () => ({ val: true });
+        adapter.getStateAsync = () => Promise.resolve({ val: true });
         adapter.setState = async () => {
             throw new Error('blocked command must not be acknowledged');
         };
@@ -1348,9 +1349,10 @@ describe('PV dual-miner changing-surplus monitor (read-only mocked IO)', () => {
                 },
             })) as unknown as ioBroker.DeviceObject[];
         adapter.getForeignStateAsync = async id => sensors.get(id) ?? null;
-        adapter.getStateAsync = async () => null;
-        adapter.setState = async (id, state) => {
+        adapter.getStateAsync = () => Promise.resolve(null);
+        adapter.setState = (id, state) => {
             writes.set(id, state.val);
+            return Promise.resolve();
         };
         adapter.setForeignStateAsync = async () => {
             throw new Error('PV monitor must never write an actuator state');
