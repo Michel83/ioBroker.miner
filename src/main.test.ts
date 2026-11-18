@@ -1289,6 +1289,14 @@ describe('PV dual-miner changing-surplus monitor (read-only mocked IO)', () => {
         await adapter.runPvMonitor();
         expect(writes.get('pvControl.surplus')).to.equal(1300);
 
+        // One stale S9 target invalidates the entire shared allocation.
+        put('target.s9', 500, now - 130_000);
+        await adapter.runPvMonitor();
+        expect(writes.get('pvControl.s9SuggestedTarget')).to.equal(null);
+        expect(writes.get('pvControl.s19SuggestedTarget')).to.equal(null);
+        expect(String(writes.get('pvControl.s19Decision'))).to.include('Unavailable');
+        put('target.s9', 500);
+
         put('grid', 600);
         put('battery', 500);
         await adapter.runPvMonitor();
@@ -1300,6 +1308,10 @@ describe('PV dual-miner changing-surplus monitor (read-only mocked IO)', () => {
         expect(writes.get('pvControl.valid')).to.equal(false);
         expect(writes.get('pvControl.surplus')).to.equal(null);
         expect(writes.get('pvControl.v243Available')).to.equal(null);
+        expect(writes.get('pvControl.s9SuggestedTarget')).to.equal(null);
+        expect(writes.get('pvControl.s19SuggestedTarget')).to.equal(null);
+        expect(String(writes.get('pvControl.s9Decision'))).to.include('Unavailable');
+        expect(String(writes.get('pvControl.s19Decision'))).to.include('Unavailable');
         for (const id of ['s9', 's19']) {
             expect(writes.get(`pvControl.miners.miner.${id}.restartLocked`)).to.equal(true);
             expect(adapter.pvRelayOffMiners.has(id)).to.equal(true);
