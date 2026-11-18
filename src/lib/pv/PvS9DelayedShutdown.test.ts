@@ -52,6 +52,31 @@ describe('PV S9 shutdown with delayed Sonoff telemetry (simulation only)', () =>
         expect(isPvShutdownSafe(sample(now, now - 130_000), now, 15_000, pausedAt)).to.equal(false);
     });
 
+    it('confirms three genuinely new S9 power readings spaced 130 seconds apart while polling every 5 seconds', () => {
+        const check = new PvShutdownConfirmation();
+        let confirmed = false;
+        for (let seconds = 0; seconds <= 400; seconds += 5) {
+            const now = start + seconds * 1000;
+            // The first post-pause measurement is delayed; subsequent Sonoff readings arrive every 130 s.
+            const lastPowerSecond = seconds < 130 ? -1 : 130 + Math.floor((seconds - 130) / 130) * 130;
+            const powerAt = lastPowerSecond < 0 ? pausedAt - 1 : start + lastPowerSecond * 1000;
+            confirmed = check.update(sample(now, powerAt), now, ageMs, pausedAt, 30_000, 10_000, 180_000);
+            if (seconds < 390) {
+                expect(confirmed, `unexpected confirmation at ${seconds}s`).to.equal(false);
+            }
+        }
+        expect(confirmed).to.equal(true);
+    });
+
+    it('rejects S9 telemetry if the next power update exceeds the 180-second sensor freshness limit', () => {
+        const check = new PvShutdownConfirmation();
+        const first = start + 130_000;
+        expect(check.update(sample(first), first, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(false);
+        const stale = first + 185_000;
+        expect(check.update(sample(stale, first), stale, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(false);
+        expect(check.update(sample(stale + 5_000), stale + 5_000, ageMs, pausedAt, 30_000, 10_000, 180_000)).to.equal(false);
+    });
+
     it('rejects a final S9 relay-off check if power becomes high again', () => {
         const at = start + 160_000;
         expect(isPvShutdownSafe(sample(at, at, 900), at, 180_000, pausedAt)).to.equal(false);
