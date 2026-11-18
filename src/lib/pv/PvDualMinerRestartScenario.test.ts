@@ -11,7 +11,7 @@ import type { PvStopRestoration } from './PvShutdownSafety';
 describe('PV dual-miner restart scenarios (simulation only)', () => {
     const now = 1_800_000_000_000;
     const maxAgeMs = 15_000;
-    const makeMiner = (minerId: string, stoppedAgoMs: number, minimumStartWatts: number) => {
+    const makeMiner = (minerId: string, stoppedAgoMs: number, minimumStartWatts: number): { measurements: PvStopRestoration; minimumStartWatts: number; locked: boolean } => {
         const relayStateId = `sonoff.0.${minerId}.POWER`;
         const measurements: PvStopRestoration = {
             storedRecord: { minerId, relayStateId, stoppedAt: now - stoppedAgoMs, relayOffConfirmed: true },
@@ -27,7 +27,7 @@ describe('PV dual-miner restart scenarios (simulation only)', () => {
         };
         return { measurements, minimumStartWatts, locked: true };
     };
-    const evaluate = (miner: ReturnType<typeof makeMiner>, relayAck: boolean, gridPower = -4500, batteryPower = 0) => {
+    const evaluate = (miner: ReturnType<typeof makeMiner>, relayAck: boolean, gridPower = -4500, batteryPower = 0): { relayOn: boolean | null; countdown: number | null; reason: string; locked: boolean } => {
         const m = miner.measurements;
         const relayOn = confirmedPvRelayOn(m.relayValue, relayAck, m.relayTimestamp, m.relayOnValue, m.now, maxAgeMs);
         const countdown = pvRestartCountdownSeconds({ ...m, relayValue: relayAck ? m.relayValue : undefined }, 180);
