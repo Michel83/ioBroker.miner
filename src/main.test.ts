@@ -1003,3 +1003,95 @@ describe('PV diagnostics after adapter restart and interrupted monitoring (no ha
         expect(adapter.pvRelayOffMiners.has('s19')).to.equal(true);
     });
 });
+
+/**
+ * Direct tests of the actual private safeStopPvMiner method using a controller-free
+ * adapter. No real miner, Sonoff relay, or ioBroker instance is contacted.
+ */
+describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
+    type StopSettings = Parameters<MinerAdapter['safeStopPvMiner']>[0];
+    type StopHarness = {
+        safeStopPvMiner: (settings: StopSettings) => Promise<void>;
+        config: { pvEnabled: boolean; pvMaxDataAge: number };
+        minerManager: { withExclusiveMiner: (id: string, fn: (miner: { stop: () => Promise<void> }) => Promise<void>) => Promise<void> };
+        getDeviceObjectId: (settings: StopSettings) => string;
+        getForeignStateAsync: (id: string) => Promise<{ val: boolean; ts: number; ack: boolean }>;
+        getStateAsync: (id: string) => Promise<{ val: number; ts: number }>;
+        readFreshPvMeasurement: (id: string, maxAgeMs: number) => Promise<{ value: number; timestamp: number }>;
+        setForeignStateAsync: (id: string, value: boolean) => Promise<void>;
+    };
+
+    function setup(): { adapter: StopHarness; settings: StopSettings; commands: string[] } {
+        const adapter = createTestAdapter() as unknown as StopHarness;
+        const commands: string[] = [];
+        adapter.config = { pvEnabled: true, pvMaxDataAge: 180 };
+        adapter.getDeviceObjectId = () => 'S9';
+        adapter.minerManager = {
+            withExclusiveMiner: async (_id, fn) => fn({
+                stop: async () => { commands.push('pause'); },
+            }),
+        };
+        adapter.getForeignStateAsync = async () => ({ val: true, ts: Date.now(), ack: true });
+        adapter.getStateAsync = async () => ({ val: 0, ts: Date.now() });
+        adapter.readFreshPvMeasurement = async () => ({ value: 0, timestamp: Date.now() });
+        adapter.setForeignStateAsync = async () => { commands.push('relay.off'); };
+        const settings = {
+            name: 'S9',
+            settings: { id: 'S9', minerType: 'bosMiner' },
+            pvControl: {
+                relayStateId: 'sonoff.0.Aktor_MinerS9.POWER',
+                powerStateId: 'sonoff.0.Aktor_MinerS9.ENERGY_Power',
+                relayOnValue: true,
+                powerSampleMaxGap: 180,
+            },
+        } as StopSettings;
+        return { adapter, settings, commands };
+    }
+
+    it('never issues relay OFF when the miner pause command fails', async () => {
+        const { adapter, settings, commands } = setup();
+        adapter.minerManager.withExclusiveMiner = async (_id, fn) => fn({
+            stop: async () => {
+                commands.push('pause');
+                throw new Error('S9 pause rejected');
+            },
+        });
+        try {
+            await adapter.safeStopPvMiner(settings);
+            expect.fail('Expected safe stop to reject');
+        } catch (error) {
+            expect(String(error)).to.include('S9 pause rejected');
+        }
+        expect(commands).to.deep.equal(['pause']);
+    });
+
+    it('never issues pause or relay OFF when required Sonoff datapoints are absent', async () => {
+        const { adapter, settings, commands } = setup();
+        const invalid = {
+            ...settings,
+            pvControl: { ...settings.pvControl, relayStateId: '' },
+        } as StopSettings;
+        try {
+            await adapter.safeStopPvMiner(invalid);
+            expect.fail('Expected safe stop to reject');
+        } catch (error) {
+            expect(String(error)).to.include('relayStateId and powerStateId required');
+        }
+        expect(commands).to.deep.equal([]);
+    });
+
+    it('never issues pause or relay OFF for a miner other than BOSMiner', async () => {
+        const { adapter, settings, commands } = setup();
+        const invalid = {
+            ...settings,
+            settings: { ...settings.settings, minerType: 'cgMiner' },
+        } as unknown as StopSettings;
+        try {
+            await adapter.safeStopPvMiner(invalid);
+            expect.fail('Expected safe stop to reject');
+        } catch (error) {
+            expect(String(error)).to.include('only implemented for BOSMiner');
+        }
+        expect(commands).to.deep.equal([]);
+    });
+});
