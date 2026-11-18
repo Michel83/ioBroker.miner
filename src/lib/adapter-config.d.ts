@@ -1,5 +1,4 @@
-
- // This file extends the AdapterConfig type from "@types/iobroker"
+// This file extends the AdapterConfig type from "@types/iobroker"
 
 declare global {
     namespace ioBroker {
@@ -17,6 +16,27 @@ declare global {
 
             /** Battery power state: positive = discharge, negative = charge. */
             pvBatteryPowerId?: string;
+
+            /** Battery SOC state for read-only V2.43 diagnostics (0-100%). */
+            pvBatterySocId?: string;
+
+            /** Observed S9 power target state, read-only V2.43 diagnostic input. */
+            pvS9TargetStateId?: string;
+
+            /** Observed S19 power target state, read-only V2.43 diagnostic input. */
+            pvS19TargetStateId?: string;
+
+            /** S9 running state (read-only). */
+            pvS9RunningStateId?: string;
+
+            /** S19 running state (read-only). */
+            pvS19RunningStateId?: string;
+
+            /** S9 actual power in watts (read-only). */
+            pvS9ActualPowerId?: string;
+
+            /** S19 actual power in watts (read-only). */
+            pvS19ActualPowerId?: string;
 
             /** PV regulation interval in seconds (default: 120). */
             pvInterval?: number;

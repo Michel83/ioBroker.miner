@@ -19,7 +19,24 @@ import { isWithinPowerTargetConstraints, type Miner } from './lib/miner/miner/Mi
 import type { MinerSettings } from './lib/miner/model/MinerSettings';
 import type { MinerStats } from './lib/miner/model/MinerStats';
 import { asyncDynamicInterval, setTimerBackend, type AsyncIntervalReturnType } from './lib/utils/delay';
-import { PvShutdownConfirmation, isPvShutdownSafe } from './lib/pv/PvShutdownSafety';
+import {
+    PvShutdownConfirmation,
+    PvRelayOffPowerConfirmation,
+    isPvMinerCommandAllowed,
+    isPvRelayOffConfirmed,
+    isPvShutdownSafe,
+    isPvStopRestorationConsistent,
+} from './lib/pv/PvShutdownSafety';
+import { calculatePvV243 } from './lib/pv/PvRegulationV243';
+import { getPvShutdownTiming } from './lib/pv/PvShutdownTiming';
+import { confirmedPvRelayOn } from './lib/pv/PvRelayFeedbackDiagnostic';
+import { pvRestartCountdownSeconds } from './lib/pv/PvRestartCountdown';
+import { pvRestartSafetyReason } from './lib/pv/PvRestartSafetyReason';
+import { evaluatePvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
+import type { PvRunEligibilityV243 } from './lib/pv/PvRunEligibilityV243';
+import type { PvMinerKindV243, PvTargetDecisionV243 } from './lib/pv/PvTargetRegulationV243';
+import { PvTargetDiagnosticV243 } from './lib/pv/PvTargetDiagnosticV243';
+import { coordinatePvTargetsV243 } from './lib/pv/PvDualMinerBudgetV243';
 import { UpdateSources } from './lib/update/UpdateSources';
 import { runUpdateChecks, type UpdateCheckSummary } from './lib/update/runUpdateChecks';
 import type { UpdateCheckContext, UpdateCheckResult } from './lib/miner/model/UpdateCheckResult';
@@ -46,8 +63,12 @@ export class MinerAdapter extends utils.Adapter {
     private updateCheckHandle: AsyncIntervalReturnType | undefined;
     private pvMonitorTimer: ReturnType<typeof setInterval> | undefined;
     private pvMonitorBusy = false;
+    private readonly pvTargetDiagnostic = new PvTargetDiagnosticV243();
     private pvMonitorWarning = '';
+    private pvRunHistory: PvRunEligibilityV243 | undefined;
+    private pvRunLastObservedAt: number | undefined;
     private readonly pvSafeStops = new Set<string>();
+    private readonly pvRelayOffMiners = new Set<string>();
     private pvShuttingDown = false;
 
     /**
@@ -82,6 +103,9 @@ export class MinerAdapter extends utils.Adapter {
         // this.on('message', this.onMessage.bind(this));
         this.on('unload', this.onUnload.bind(this));
 
+        this.minerManager.setCommandGuard(id =>
+            isPvMinerCommandAllowed(id, this.pvSafeStops, this.pvRelayOffMiners, this.pvShuttingDown),
+        );
         this.deviceManagement = new MinerAdapterDeviceManagement(this);
     }
 
@@ -279,8 +303,17 @@ export class MinerAdapter extends utils.Adapter {
                         return;
                     }
 
-                    if (this.pvSafeStops.has(deviceSettings.settings.id) || this.pvShuttingDown) {
-                        this.log.warn(`setProfile blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`);
+                    if (
+                        !isPvMinerCommandAllowed(
+                            deviceSettings.settings.id,
+                            this.pvSafeStops,
+                            this.pvRelayOffMiners,
+                            this.pvShuttingDown,
+                        )
+                    ) {
+                        this.log.warn(
+                            `setProfile blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`,
+                        );
                         return;
                     }
 
@@ -313,8 +346,17 @@ export class MinerAdapter extends utils.Adapter {
                         return;
                     }
 
-                    if (this.pvSafeStops.has(deviceSettings.settings.id) || this.pvShuttingDown) {
-                        this.log.warn(`setPowerTarget blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`);
+                    if (
+                        !isPvMinerCommandAllowed(
+                            deviceSettings.settings.id,
+                            this.pvSafeStops,
+                            this.pvRelayOffMiners,
+                            this.pvShuttingDown,
+                        )
+                    ) {
+                        this.log.warn(
+                            `setPowerTarget blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`,
+                        );
                         return;
                     }
 
@@ -357,14 +399,25 @@ export class MinerAdapter extends utils.Adapter {
         featureId: string,
         value: ioBroker.StateValue,
     ): Promise<void> {
-        const miner = deviceSettings.settings.id ? this.minerManager.getMiner(deviceSettings.settings.id) : undefined;
-        if (!miner) {
+        const minerId = deviceSettings.settings.id;
+        if (!minerId || !this.minerManager.hasMiner(minerId)) {
             this.log.warn(`cannot set ${featureId} on device ${deviceSettings.name}: the device is disabled`);
+            return;
+        }
+        if (!isPvMinerCommandAllowed(minerId, this.pvSafeStops, this.pvRelayOffMiners, this.pvShuttingDown)) {
+            this.log.warn(
+                `custom feature ${featureId} blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`,
+            );
             return;
         }
 
         try {
-            const applied = await miner.setCustomFeature(featureId, value);
+            const applied = await this.minerManager.withExclusiveMinerCommand(minerId, miner => {
+                if (!isPvMinerCommandAllowed(minerId, this.pvSafeStops, this.pvRelayOffMiners, this.pvShuttingDown)) {
+                    throw new Error('PV safe stop or adapter shutdown active');
+                }
+                return miner.setCustomFeature(featureId, value);
+            });
             await this.setState(stateId, { val: applied, ack: true });
         } catch (e) {
             this.log.warn(`setting ${featureId} on device ${deviceSettings.name} failed: ${String(e)}`);
@@ -402,6 +455,55 @@ export class MinerAdapter extends utils.Adapter {
     }
 
     // Try to initialise and connect to already known devices
+    /**
+     * Restore PV shutdown history for diagnostics only. Keep miner commands blocked
+     * until a separate, fully validated startup state machine is implemented.
+     *
+     * @param settings - configured miner
+     */
+    private async restorePvStopDiagnostics(settings: IOBrokerMinerSettings): Promise<void> {
+        const minerId = settings.settings.id;
+        const relayId = settings.pvControl?.relayStateId;
+        if (!minerId || !relayId || typeof settings.pvControl?.relayOnValue !== 'boolean') {
+            this.log.warn(`PV restart locked for ${settings.name}: missing miner or relay ID`);
+            return;
+        }
+        const deviceId = this.getDeviceObjectId(settings);
+        const recordState = await this.getStateAsync(`pvControl.miners.${deviceId}.lastSafeStop`);
+        let raw: unknown;
+        try {
+            raw = typeof recordState?.val === 'string' ? JSON.parse(recordState.val) : undefined;
+        } catch {
+            raw = undefined;
+        }
+        const ageMs = Math.max(10, Number(this.config.pvMaxDataAge) || 180) * 1000;
+        const [power, relay] = await Promise.all([
+            this.readFreshPvMeasurement(settings.pvControl?.powerStateId || '', ageMs),
+            this.getForeignStateAsync(relayId),
+        ]);
+        const consistent = isPvStopRestorationConsistent({
+            storedRecord: raw,
+            minerId,
+            relayStateId: relayId,
+            relayOnValue: settings.pvControl.relayOnValue,
+            relayValue: relay?.val,
+            relayTimestamp: relay?.ts,
+            power: power?.value,
+            powerTimestamp: power?.timestamp,
+            now: Date.now(),
+            maxAgeMs: ageMs,
+        });
+        if (consistent) {
+            this.log.info(
+                `PV stop history for ${settings.name} matches fresh OFF/zero-power diagnostics; restart remains locked`,
+            );
+        } else {
+            this.log.warn(
+                `PV restart locked for ${settings.name}: stored stop, relay or power diagnostics missing/inconsistent`,
+            );
+        }
+    }
+
     private async tryKnownDevices(): Promise<void> {
         const knownDevices = await this.getDevicesAsync();
 
@@ -564,7 +666,124 @@ export class MinerAdapter extends utils.Adapter {
             return;
         }
 
+        // Fail closed on every adapter restart. Persisted history cannot authorize commands.
+        if (settings.pvControl?.enabled === true && settings.settings.id) {
+            this.pvRelayOffMiners.add(settings.settings.id);
+            try {
+                await this.restorePvStopDiagnostics(settings);
+            } catch (error) {
+                // Diagnostics must never release the command guard or abort device initialization.
+                this.log.warn(
+                    `PV restart locked for ${settings.name}: stop history or measurement lookup failed: ${String(error)}`,
+                );
+            }
+        }
+
         await this.createDeviceStateObjects(settings);
+        if (settings.pvControl?.enabled === true && settings.settings.id) {
+            // Diagnostic only: the in-memory command lock was set before any async work.
+            // Persisted diagnostics are never read as authorization to unlock a miner.
+            const lockPath = `pvControl.miners.${this.getDeviceObjectId(settings)}.restartLockDiagnostic`;
+            try {
+                await this.extendObject('pvControl.miners', {
+                    type: 'channel',
+                    common: { name: 'PV miner diagnostics' },
+                    native: {},
+                });
+                await this.extendObject(`pvControl.miners.${this.getDeviceObjectId(settings)}`, {
+                    type: 'channel',
+                    common: { name: 'PV miner diagnostics' },
+                    native: {},
+                });
+                await this.extendObject(lockPath, {
+                    type: 'state',
+                    common: {
+                        name: 'PV restart lock diagnostic (JSON)',
+                        type: 'string',
+                        role: 'json',
+                        read: true,
+                        write: false,
+                    },
+                    native: {},
+                });
+                // Simple read-only VIS states mirror the actual in-memory lock.
+                // They are not writable commands or persisted unlock permissions.
+                const diagnosticBase = `pvControl.miners.${this.getDeviceObjectId(settings)}`;
+                await this.extendObject(`${diagnosticBase}.restartLocked`, {
+                    type: 'state',
+                    common: {
+                        name: 'PV restart locked (read-only)',
+                        type: 'boolean',
+                        role: 'indicator',
+                        read: true,
+                        write: false,
+                    },
+                    native: {},
+                });
+                await this.extendObject(`${diagnosticBase}.safetyReason`, {
+                    type: 'state',
+                    common: {
+                        name: 'PV restart safety reason (read-only)',
+                        type: 'string',
+                        role: 'text',
+                        read: true,
+                        write: false,
+                    },
+                    native: {},
+                });
+                // Unknown is deliberate: no fresh acknowledged relay feedback or
+                // validated restart deadline has been established on adapter startup.
+                await this.extendObject(`${diagnosticBase}.relayOn`, {
+                    type: 'state',
+                    common: {
+                        name: 'Confirmed relay ON (null = unknown)',
+                        type: 'boolean',
+                        role: 'indicator',
+                        read: true,
+                        write: false,
+                    },
+                    native: {},
+                });
+                await this.extendObject(`${diagnosticBase}.restartCountdown`, {
+                    type: 'state',
+                    common: {
+                        name: 'Validated restart countdown (null = unavailable)',
+                        type: 'number',
+                        role: 'value.interval',
+                        unit: 's',
+                        read: true,
+                        write: false,
+                    },
+                    native: {},
+                });
+                // lastSafeStop is already stored as a per-miner JSON record by the
+                // safe-stop path; do not overwrite it with an invented timestamp.
+                await this.setState(`${diagnosticBase}.relayOn`, { val: null, ack: true });
+                await this.setState(`${diagnosticBase}.restartCountdown`, { val: null, ack: true });
+                await this.setState(`${diagnosticBase}.restartLocked`, {
+                    val: this.pvRelayOffMiners.has(settings.settings.id),
+                    ack: true,
+                });
+                await this.setState(`${diagnosticBase}.safetyReason`, {
+                    val: 'adapter_restart_requires_fresh_safety_validation',
+                    ack: true,
+                });
+                await this.setState(lockPath, {
+                    val: JSON.stringify({
+                        minerId: settings.settings.id,
+                        locked: true,
+                        reason: 'adapter_restart_requires_fresh_safety_validation',
+                        recordedAt: Date.now(),
+                        safetyStatus: 'not_authorized',
+                    }),
+                    ack: true,
+                });
+            } catch (error) {
+                this.log.warn(
+                    `PV restart lock diagnostic write failed for ${settings.name}; lock remains active: ${String(error)}`,
+                );
+            }
+        }
         const enabledState = await this.getStateAsync(`${device._id}.enabled`);
         settings.enabled = (enabledState?.val ?? initialEnabled ?? true) as boolean;
         await this.writeStaticInfoStates(settings);
@@ -1115,6 +1334,16 @@ export class MinerAdapter extends utils.Adapter {
             gridPower: { name: 'Grid power', type: 'number', unit: 'W' },
             batteryPower: { name: 'Battery power', type: 'number', unit: 'W' },
             surplus: { name: 'PV surplus after reserve and battery discharge', type: 'number', unit: 'W' },
+            batterySoc: { name: 'Battery SOC for V2.43', type: 'number', unit: '%' },
+            v243Available: { name: 'V2.43 available PV power', type: 'number', unit: 'W' },
+            v243EffectiveGrid: { name: 'V2.43 effective grid power', type: 'number', unit: 'W' },
+            v243Status: { name: 'V2.43 calculation status (read-only)', type: 'string' },
+            s9RunEligibility: { name: 'S9 start/stop eligibility (read-only)', type: 'string' },
+            s19RunEligibility: { name: 'S19 start/stop eligibility (read-only)', type: 'string' },
+            s9SuggestedTarget: { name: 'S9 proposed target (diagnostic only)', type: 'number', unit: 'W' },
+            s9Decision: { name: 'S9 proposed action (diagnostic only)', type: 'string' },
+            s19SuggestedTarget: { name: 'S19 proposed target (diagnostic only)', type: 'number', unit: 'W' },
+            s19Decision: { name: 'S19 proposed action (diagnostic only)', type: 'string' },
             status: { name: 'PV monitor status', type: 'string' },
         };
         for (const [key, common] of Object.entries(states)) {
@@ -1124,6 +1353,19 @@ export class MinerAdapter extends utils.Adapter {
                 native: {},
             });
         }
+        // Persistent, read-only diagnostic records. No saved record authorizes relay or miner commands.
+        await this.extendObject('pvControl.lastSafeStop', {
+            type: 'state',
+            common: {
+                name: 'Last confirmed PV safe stop (JSON)',
+                type: 'string',
+                role: 'json',
+                read: true,
+                write: false,
+                def: '',
+            },
+            native: {},
+        });
         await this.setState('pvControl.enabled', { val: this.config.pvEnabled === true, ack: true });
         const intervalSeconds = Math.max(30, Number(this.config.pvInterval) || 120);
         this.pvMonitorTimer = setInterval(() => {
@@ -1151,6 +1393,25 @@ export class MinerAdapter extends utils.Adapter {
             typeof timestamp !== 'number' ||
             timestamp > Date.now() + 10_000 ||
             Date.now() - timestamp > maxAgeMs
+        ) {
+            return undefined;
+        }
+        return state.val;
+    }
+
+    private async readFreshPvBoolean(id: string, maxAgeMs: number): Promise<boolean | undefined> {
+        if (!id) {
+            return undefined;
+        }
+        const state = await this.getForeignStateAsync(id);
+        const now = Date.now();
+        if (
+            !state ||
+            typeof state.val !== 'boolean' ||
+            typeof state.ts !== 'number' ||
+            !Number.isFinite(state.ts) ||
+            state.ts > now ||
+            now - state.ts > maxAgeMs
         ) {
             return undefined;
         }
@@ -1193,6 +1454,94 @@ export class MinerAdapter extends utils.Adapter {
         this.pvMonitorBusy = true;
         try {
             const ageMs = Math.max(10, Number(this.config.pvMaxDataAge) || 180) * 1000;
+            // Read-only VIS feedback. Every cycle resets missing/stale/unacknowledged
+            // relay observations to null; never infer relay state from commands.
+            for (const device of await this.getDevicesAsync()) {
+                const settings = device.native as IOBrokerDeviceSettings;
+                if (!isMiner(settings) || settings.pvControl?.enabled !== true || !settings.settings.id) {
+                    continue;
+                }
+                const base = `pvControl.miners.${this.getDeviceObjectId(settings)}`;
+                const pv = settings.pvControl;
+                let relayOn: boolean | null = null;
+                const feedbackId = pv.relayFeedbackStateId || pv.relayStateId;
+                if (feedbackId && typeof pv.relayOnValue === 'boolean') {
+                    try {
+                        const state = await this.getForeignStateAsync(feedbackId);
+                        relayOn = confirmedPvRelayOn(
+                            state?.val,
+                            state?.ack,
+                            state?.ts,
+                            pv.relayOnValue,
+                            Date.now(),
+                            ageMs,
+                        );
+                    } catch {
+                        // Unavailable feedback is unknown, never confirmed OFF.
+                    }
+                }
+                await this.setState(`${base}.relayOn`, { val: relayOn, ack: true });
+                // Only display a countdown when the saved stop matches current
+                // fresh relay OFF and near-zero measured power. No unlock path.
+                let countdown: number | null = null;
+                if (pv.relayStateId && typeof pv.relayOnValue === 'boolean') {
+                    try {
+                        const recordState = await this.getStateAsync(`${base}.lastSafeStop`);
+                        let storedRecord: unknown;
+                        try {
+                            storedRecord =
+                                typeof recordState?.val === 'string' ? JSON.parse(recordState.val) : undefined;
+                        } catch {
+                            storedRecord = undefined;
+                        }
+                        const [relay, power] = await Promise.all([
+                            this.getForeignStateAsync(feedbackId || ''),
+                            this.readFreshPvMeasurement(pv.powerStateId || '', ageMs),
+                        ]);
+                        const now = Date.now();
+                        countdown = pvRestartCountdownSeconds(
+                            {
+                                storedRecord,
+                                minerId: settings.settings.id,
+                                relayStateId: pv.relayStateId,
+                                relayOnValue: pv.relayOnValue,
+                                relayValue: relay?.ack === true ? relay.val : undefined,
+                                relayTimestamp: relay?.ts,
+                                power: power?.value,
+                                powerTimestamp: power?.timestamp,
+                                now,
+                                maxAgeMs: ageMs,
+                            },
+                            pv.restartDelay,
+                        );
+                    } catch {
+                        // Incomplete diagnostics must never invent a countdown.
+                    }
+                }
+                await this.setState(`${base}.restartCountdown`, { val: countdown, ack: true });
+                // The lock is the authoritative in-memory command guard.
+                // The reason below only explains observations and cannot unlock it.
+                const locked =
+                    this.pvRelayOffMiners.has(settings.settings.id) ||
+                    this.pvSafeStops.has(settings.settings.id) ||
+                    this.pvShuttingDown;
+                const [observedGrid, observedBattery] = await Promise.all([
+                    this.readFreshPvValue(this.config.pvGridPowerId || '', ageMs),
+                    this.readFreshPvValue(this.config.pvBatteryPowerId || '', ageMs),
+                ]);
+                const reason = pvRestartSafetyReason({
+                    locked,
+                    shuttingDown: this.pvShuttingDown,
+                    relayOn,
+                    countdown,
+                    gridPower: observedGrid,
+                    batteryPower: observedBattery,
+                    reserveWatts: Math.max(0, Number(this.config.pvReserve) || 0),
+                    minimumStartWatts: Number(pv.minPower),
+                });
+                await this.setState(`${base}.restartLocked`, { val: locked, ack: true });
+                await this.setState(`${base}.safetyReason`, { val: reason, ack: true });
+            }
             const grid = await this.readFreshPvValue(this.config.pvGridPowerId || '', ageMs);
             const battery = await this.readFreshPvValue(this.config.pvBatteryPowerId || '', ageMs);
             const valid = grid !== undefined && battery !== undefined;
@@ -1202,6 +1551,128 @@ export class MinerAdapter extends utils.Adapter {
             const reserve = Math.max(0, Number(this.config.pvReserve) || 0);
             const surplus = valid ? Math.max(0, -grid - reserve - Math.max(0, battery)) : null;
             await this.setState('pvControl.surplus', { val: surplus, ack: true });
+            // V2.43 requires a fresh SOC reading; do not substitute zero or guess.
+            const soc = await this.readFreshPvValue(this.config.pvBatterySocId || '', ageMs);
+            const v243 = calculatePvV243({ gridPower: grid, batteryPower: battery, batterySoc: soc });
+            await this.setState('pvControl.batterySoc', { val: soc ?? null, ack: true });
+            await this.setState('pvControl.v243Available', { val: v243?.availableWatts ?? null, ack: true });
+            await this.setState('pvControl.v243EffectiveGrid', { val: v243?.effectiveGridWatts ?? null, ack: true });
+            await this.setState('pvControl.v243Status', {
+                val: v243
+                    ? 'Read-only V2.43 calculation valid; commands locked'
+                    : 'Missing, stale or invalid V2.43 input; commands locked',
+                ack: true,
+            });
+            // Read-only proposals: stabilize each miner first, then allocate one shared export budget.
+            // No path here issues miner commands or writes foreign actuator states.
+            const observedTargets: Partial<Record<PvMinerKindV243, number>> = {};
+            const proposals: Partial<Record<PvMinerKindV243, PvTargetDecisionV243>> = {};
+            for (const miner of ['S9', 'S19'] as PvMinerKindV243[]) {
+                const targetId = miner === 'S9' ? this.config.pvS9TargetStateId : this.config.pvS19TargetStateId;
+                const currentTarget = await this.readFreshPvValue(targetId || '', ageMs);
+                if (!v243 || currentTarget === undefined) {
+                    this.pvTargetDiagnostic.reset(miner);
+                    continue;
+                }
+                observedTargets[miner] = currentTarget;
+                proposals[miner] = this.pvTargetDiagnostic.evaluate({
+                    miner,
+                    currentTargetWatts: currentTarget,
+                    effectiveGridWatts: v243.effectiveGridWatts,
+                    batteryPowerWatts: battery!,
+                    now: Date.now(),
+                });
+            }
+            const coordinated =
+                v243 &&
+                grid !== undefined &&
+                battery !== undefined &&
+                observedTargets.S9 !== undefined &&
+                observedTargets.S19 !== undefined &&
+                proposals.S9 !== undefined &&
+                proposals.S19 !== undefined
+                    ? coordinatePvTargetsV243({
+                          s9: {
+                              miner: 'S9',
+                              currentTargetWatts: observedTargets.S9,
+                              effectiveGridWatts: v243.effectiveGridWatts,
+                              batteryPowerWatts: battery,
+                              now: Date.now(),
+                          },
+                          s19: {
+                              miner: 'S19',
+                              currentTargetWatts: observedTargets.S19,
+                              effectiveGridWatts: v243.effectiveGridWatts,
+                              batteryPowerWatts: battery,
+                              now: Date.now(),
+                          },
+                          gridPowerWatts: v243.effectiveGridWatts,
+                          batteryPowerWatts: battery,
+                          reserveWatts: reserve,
+                          proposals: { s9: proposals.S9, s19: proposals.S19 },
+                      })
+                    : undefined;
+            for (const miner of ['S9', 'S19'] as PvMinerKindV243[]) {
+                const prefix = miner === 'S9' ? 's9' : 's19';
+                const decision = coordinated ? (miner === 'S9' ? coordinated.s9 : coordinated.s19) : undefined;
+                await this.setState(`pvControl.${prefix}SuggestedTarget`, {
+                    val: decision?.action === 'set-target' ? (decision.targetWatts ?? null) : null,
+                    ack: true,
+                });
+                await this.setState(`pvControl.${prefix}Decision`, {
+                    val: decision
+                        ? `${decision.action}: ${decision.reason} (shared budget; observations only; no commands)`
+                        : 'Unavailable: missing or stale target/PV measurement for either miner',
+                    ack: true,
+                });
+            }
+            // Read-only running/actual-power observations. No action path consumes these decisions.
+            const [s9Running, s19Running, s9Actual, s19Actual, s9Target] = await Promise.all([
+                this.readFreshPvBoolean(this.config.pvS9RunningStateId || '', ageMs),
+                this.readFreshPvBoolean(this.config.pvS19RunningStateId || '', ageMs),
+                this.readFreshPvValue(this.config.pvS9ActualPowerId || '', ageMs),
+                this.readFreshPvValue(this.config.pvS19ActualPowerId || '', ageMs),
+                this.readFreshPvValue(this.config.pvS9TargetStateId || '', ageMs),
+            ]);
+            const observationNow = Date.now();
+            // A missing monitor cycle invalidates consecutive eligibility observations.
+            if (
+                this.pvRunLastObservedAt === undefined ||
+                observationNow < this.pvRunLastObservedAt ||
+                observationNow - this.pvRunLastObservedAt > Math.max(30, Number(this.config.pvInterval) || 120) * 1500
+            ) {
+                this.pvRunHistory = undefined;
+            }
+            this.pvRunLastObservedAt = observationNow;
+            const runEligibility = evaluatePvRunEligibilityV243({
+                now: observationNow,
+                hour: new Date(observationNow).getHours(),
+                availableWatts: v243?.availableWatts,
+                s9Running,
+                s19Running,
+                s9TargetWatts: s9Target,
+                s9ActualWatts: s9Actual,
+                gridPowerWatts: grid,
+                s9ToS19CandidateSince: this.pvRunHistory?.s9ToS19CandidateSince,
+                s9LowPowerSince: this.pvRunHistory?.s9LowPowerSince,
+                s19LowPowerSince: this.pvRunHistory?.s19LowPowerSince,
+            });
+            // S19 actual power must also be fresh before reporting eligibility.
+            if (s19Actual === undefined) {
+                this.pvRunHistory = undefined;
+                await this.setState('pvControl.s9RunEligibility', {
+                    val: 'unavailable: S19 actual power missing',
+                    ack: true,
+                });
+                await this.setState('pvControl.s19RunEligibility', {
+                    val: 'unavailable: S19 actual power missing',
+                    ack: true,
+                });
+            } else {
+                this.pvRunHistory = runEligibility;
+                await this.setState('pvControl.s9RunEligibility', { val: runEligibility.s9, ack: true });
+                await this.setState('pvControl.s19RunEligibility', { val: runEligibility.s19, ack: true });
+            }
             const status = !valid
                 ? 'Missing or stale PV measurements; no commands sent'
                 : 'Read-only diagnostics active; miner and relay commands locked';
@@ -1219,6 +1690,8 @@ export class MinerAdapter extends utils.Adapter {
      * Stop mining and disconnect the relay only after fresh, stable evidence of zero
      * hashrate AND low mains power. A pause command alone is not confirmation.
      * No relay write occurs if any check fails or the adapter is unloading.
+     *
+     * @param settings
      */
     private async safeStopPvMiner(settings: IOBrokerMinerSettings): Promise<void> {
         const id = settings.settings.id;
@@ -1232,102 +1705,200 @@ export class MinerAdapter extends utils.Adapter {
         if (settings.settings.minerType !== 'bosMiner') {
             throw new Error(`PV safe stop only implemented for BOSMiner: ${settings.name}`);
         }
+        const feedbackId = pv.relayFeedbackStateId || pv.relayStateId;
+        // Per-miner telemetry settings; preserves existing S19 defaults.
+        const timing = getPvShutdownTiming(pv.powerSampleMaxGap, pv.relayOffConfirmationTimeout);
+        const powerSampleGapMs = timing.powerSampleGapMs;
+        const confirmationTimeoutMs = timing.postRelayTimeoutMs;
         this.pvSafeStops.add(id);
         const deviceId = this.getDeviceObjectId(settings);
         const ageMs = Math.max(10, Number(this.config.pvMaxDataAge) || 180) * 1000;
-        const maxWaitMs = 5 * 60_000;
+        const maxWaitMs = timing.preRelayTimeoutMs;
         const started = Date.now();
         const confirmation = new PvShutdownConfirmation();
         let pausedAt = 0;
         try {
             this.log.info(`PV safe stop requested for ${settings.name}; relay stays ON until confirmed`);
-            await this.minerManager.stopMiner(id);
-            pausedAt = Date.now();
-            // A successful pause command is not proof of stopped hardware.
-            while (Date.now() - started < maxWaitMs) {
-                if (this.config.pvEnabled !== true || this.pvShuttingDown) {
-                    throw new Error('PV automation disabled during safe stop');
-                }
-                const [power, hash, seen, relay] = await Promise.all([
-                    this.readFreshPvMeasurement(pv.powerStateId, ageMs),
-                    this.getStateAsync(`${deviceId}.stats.totalHashrate`),
-                    this.getStateAsync(`${deviceId}.info.lastSeen`),
-                    this.getForeignStateAsync(pv.relayStateId),
-                ]);
-                const now = Date.now();
-                const relayIsOn =
-                    relay?.val === pv.relayOnValue &&
-                    typeof relay.ts === 'number' &&
-                    relay.ts <= now &&
-                    now - relay.ts <= ageMs;
-
-                if (!relayIsOn) {
-                    throw new Error(`Relay state unavailable or not ON for ${settings.name}`);
-                }
-
-                const confirmed = confirmation.update(
-                    {
-                        hashrate: typeof hash?.val === 'number' ? hash.val : undefined,
-                        hashrateTimestamp: hash?.ts,
-                        power: power?.value,
-                        powerTimestamp: power?.timestamp,
-                        lastSeen: typeof seen?.val === 'number' ? seen.val : undefined,
-                    },
-                    now,
-                    ageMs,
-                    pausedAt,
-                );
-
-                const delayMs = Math.max(0, Number(pv.shutdownDelay) || 0) * 1000;
-
-                if (confirmed && now - pausedAt >= delayMs) {
-                    // Recheck the PV enable flag immediately before the relay command.
+            await this.minerManager.withExclusiveMiner(id, async miner => {
+                await miner.stop();
+                pausedAt = Date.now();
+                // A successful pause command is not proof of stopped hardware.
+                while (Date.now() - started < maxWaitMs) {
                     if (this.config.pvEnabled !== true || this.pvShuttingDown) {
-                        throw new Error('PV automation disabled before relay shutdown');
+                        throw new Error('PV automation disabled during safe stop');
                     }
-                    // Final independent check immediately before relay shutdown.
-                    const [finalPower, finalHash, finalSeen, finalRelay] = await Promise.all([
-                        this.readFreshPvMeasurement(pv.powerStateId, 15_000),
+                    const [power, hash, seen, relay] = await Promise.all([
+                        this.readFreshPvMeasurement(pv.powerStateId, ageMs),
                         this.getStateAsync(`${deviceId}.stats.totalHashrate`),
                         this.getStateAsync(`${deviceId}.info.lastSeen`),
-                        this.getForeignStateAsync(pv.relayStateId),
+                        this.getForeignStateAsync(feedbackId),
                     ]);
+                    const now = Date.now();
+                    const relayIsOn =
+                        relay?.val === pv.relayOnValue &&
+                        typeof relay.ts === 'number' &&
+                        relay.ts <= now &&
+                        now - relay.ts <= ageMs;
 
-                    const finalNow = Date.now();
-
-                    const finalSafe = isPvShutdownSafe(
-                        {
-                            hashrate: typeof finalHash?.val === 'number' ? finalHash.val : undefined,
-                            hashrateTimestamp: finalHash?.ts,
-                            power: finalPower?.value,
-                            powerTimestamp: finalPower?.timestamp,
-                            lastSeen: typeof finalSeen?.val === 'number' ? finalSeen.val : undefined,
-                        },
-                        finalNow,
-                        15_000,
-                        pausedAt,
-                    );
-
-                    if (
-                        !finalSafe ||
-                        finalRelay?.val !== pv.relayOnValue ||
-                        typeof finalRelay.ts !== 'number' ||
-                        finalRelay.ts > finalNow ||
-                        finalNow - finalRelay.ts > ageMs ||
-                        this.config.pvEnabled !== true || this.pvShuttingDown
-                    ) {
-                        throw new Error(`Final PV shutdown safety check failed for ${settings.name}`);
+                    if (!relayIsOn) {
+                        throw new Error(`Relay state unavailable or not ON for ${settings.name}`);
                     }
 
-                    await this.setForeignStateAsync(pv.relayStateId, !pv.relayOnValue);
-                    this.log.info(`PV safe stop confirmed for ${settings.name}; relay switched OFF`);
-                    return;
+                    const confirmed = confirmation.update(
+                        {
+                            hashrate: typeof hash?.val === 'number' ? hash.val : undefined,
+                            hashrateTimestamp: hash?.ts,
+                            power: power?.value,
+                            powerTimestamp: power?.timestamp,
+                            lastSeen: typeof seen?.val === 'number' ? seen.val : undefined,
+                        },
+                        now,
+                        ageMs,
+                        pausedAt,
+                        30_000,
+                        10_000,
+                        powerSampleGapMs,
+                    );
+
+                    const delayMs = Math.max(0, Number(pv.shutdownDelay) || 0) * 1000;
+
+                    if (confirmed && now - pausedAt >= delayMs) {
+                        // Recheck the PV enable flag immediately before the relay command.
+                        if (this.config.pvEnabled !== true || this.pvShuttingDown) {
+                            throw new Error('PV automation disabled before relay shutdown');
+                        }
+                        // Final independent check: accept only a post-pause sample within the configured
+                        // telemetry gap. Slow sensors must still provide three distinct fresh samples.
+                        const [finalPower, finalHash, finalSeen, finalRelay] = await Promise.all([
+                            this.readFreshPvMeasurement(pv.powerStateId, powerSampleGapMs),
+                            this.getStateAsync(`${deviceId}.stats.totalHashrate`),
+                            this.getStateAsync(`${deviceId}.info.lastSeen`),
+                            this.getForeignStateAsync(feedbackId),
+                        ]);
+
+                        const finalNow = Date.now();
+
+                        const finalSafe = isPvShutdownSafe(
+                            {
+                                hashrate: typeof finalHash?.val === 'number' ? finalHash.val : undefined,
+                                hashrateTimestamp: finalHash?.ts,
+                                power: finalPower?.value,
+                                powerTimestamp: finalPower?.timestamp,
+                                lastSeen: typeof finalSeen?.val === 'number' ? finalSeen.val : undefined,
+                            },
+                            finalNow,
+                            powerSampleGapMs,
+                            pausedAt,
+                        );
+
+                        if (
+                            !finalSafe ||
+                            finalRelay?.val !== pv.relayOnValue ||
+                            typeof finalRelay.ts !== 'number' ||
+                            finalRelay.ts > finalNow ||
+                            finalNow - finalRelay.ts > ageMs ||
+                            this.config.pvEnabled !== true ||
+                            this.pvShuttingDown
+                        ) {
+                            throw new Error(`Final PV shutdown safety check failed for ${settings.name}`);
+                        }
+
+                        // Block all further miner commands before requesting relay OFF.
+                        // An acknowledgement of the write is not proof of power loss.
+                        this.pvRelayOffMiners.add(id);
+                        const relayOffRequestedAt = Date.now();
+                        await this.setForeignStateAsync(pv.relayStateId, !pv.relayOnValue);
+                        const powerConfirmation = new PvRelayOffPowerConfirmation(relayOffRequestedAt);
+                        const confirmationDeadline = Date.now() + confirmationTimeoutMs;
+                        while (Date.now() < confirmationDeadline && !this.pvShuttingDown) {
+                            await this.delay(5_000);
+                            const [sample, relayFeedback] = await Promise.all([
+                                this.readFreshPvMeasurement(pv.powerStateId, ageMs),
+                                this.getForeignStateAsync(feedbackId),
+                            ]);
+                            const feedbackNow = Date.now();
+                            const relayConfirmedOff = isPvRelayOffConfirmed(
+                                relayFeedback?.val,
+                                relayFeedback?.ts,
+                                relayFeedback?.ack,
+                                pv.relayOnValue,
+                                relayOffRequestedAt,
+                                feedbackNow,
+                                ageMs,
+                            );
+                            if (
+                                powerConfirmation.update(
+                                    sample?.value,
+                                    sample?.timestamp,
+                                    relayConfirmedOff,
+                                    feedbackNow,
+                                    ageMs,
+                                )
+                            ) {
+                                const finalFeedback = await this.getForeignStateAsync(feedbackId);
+                                if (
+                                    !isPvRelayOffConfirmed(
+                                        finalFeedback?.val,
+                                        finalFeedback?.ts,
+                                        finalFeedback?.ack,
+                                        pv.relayOnValue,
+                                        relayOffRequestedAt,
+                                        Date.now(),
+                                        ageMs,
+                                    )
+                                ) {
+                                    powerConfirmation.reset();
+                                    continue;
+                                }
+                                const record = {
+                                    minerId: id,
+                                    relayStateId: pv.relayStateId,
+                                    stoppedAt: Date.now(),
+                                    relayOffConfirmed: true,
+                                };
+                                const recordPath = `pvControl.miners.${deviceId}.lastSafeStop`;
+                                await this.extendObject('pvControl.miners', {
+                                    type: 'channel',
+                                    common: { name: 'PV miner shutdown records' },
+                                    native: {},
+                                });
+                                await this.extendObject(`pvControl.miners.${deviceId}`, {
+                                    type: 'channel',
+                                    common: { name: `PV shutdown record for ${settings.name}` },
+                                    native: {},
+                                });
+                                await this.extendObject(recordPath, {
+                                    type: 'state',
+                                    common: {
+                                        name: 'Last confirmed safe stop (JSON)',
+                                        type: 'string',
+                                        role: 'json',
+                                        read: true,
+                                        write: false,
+                                        def: '',
+                                    },
+                                    native: {},
+                                });
+                                await this.setState(recordPath, {
+                                    val: JSON.stringify(record),
+                                    ack: true,
+                                });
+                                this.log.info(
+                                    `PV safe stop for ${settings.name}: three fresh near-zero power samples confirmed`,
+                                );
+                                return;
+                            }
+                        }
+                        throw new Error(
+                            `PV relay OFF requested for ${settings.name}, but fresh acknowledged relay OFF feedback and three near-zero power samples were not confirmed; miner commands remain blocked`,
+                        );
+                    }
+                    await this.delay(5_000);
                 }
-                await this.delay(5_000);
-            }
-            throw new Error(`PV safe stop timed out for ${settings.name}; relay remains ON`);
+                throw new Error(`PV safe stop timed out for ${settings.name}; relay remains ON`);
+            });
         } catch (error) {
-            this.log.error(`PV safe stop failed for ${settings.name}; relay NOT switched off: ${String(error)}`);
+            this.log.error(`PV safe stop failed for ${settings.name}; relay state may be unknown: ${String(error)}`);
             throw error;
         } finally {
             this.pvSafeStops.delete(id);
