@@ -5,7 +5,7 @@ import { coordinatePvTargetsV243 } from './PvDualMinerBudgetV243';
 /** A new adapter process owns fresh in-memory diagnostic history. No hardware IO. */
 describe('V2.43 dual-miner PV monitor restart isolation', () => {
     const now = 1_800_000_000_000;
-    const input = (miner: 'S9' | 'S19', timestamp: number) => ({
+    const input = (miner: 'S9' | 'S19', timestamp: number): Parameters<PvTargetDiagnosticV243['evaluate']>[0] => ({
         miner,
         currentTargetWatts: miner === 'S9' ? 1000 : 1500,
         effectiveGridWatts: -800,
