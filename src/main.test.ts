@@ -1063,6 +1063,61 @@ describe('PV S9/S19 real MinerManager command interlock (mocked miners)', () => 
     });
 });
 
+describe('PV ioBroker stateChange command interlock (mocked IO)', () => {
+    it('blocks queued S9 and S19 start/profile/power commands after their locks activate', async () => {
+        const adapter = createTestAdapter() as unknown as {
+            pvRelayOffMiners: Set<string>;
+            minerManager: {
+                miners: Array<unknown>;
+                startMiner: (id: string) => Promise<void>;
+                setProfile: (id: string, profile: string) => Promise<void>;
+                setPowerTarget: (id: string, power: number) => Promise<void>;
+            };
+        };
+        const calls: string[] = [];
+        for (const id of ['s9', 's19']) {
+            adapter.minerManager.miners.push({
+                settings: { id },
+                start: async () => { calls.push(`${id}.start`); },
+                setProfile: async () => { calls.push(`${id}.profile`); },
+                setPowerTarget: async () => { calls.push(`${id}.power`); },
+            });
+        }
+        // A command waiting behind a previous operation must check the guard
+        // when it reaches the queue, not only when it is first requested.
+        let release!: () => void;
+        const blocker = new Promise<void>(resolve => { release = resolve; });
+        const manager = adapter.minerManager as typeof adapter.minerManager & {
+            withExclusiveMiner: (id: string, fn: () => Promise<void>) => Promise<void>;
+        };
+        const active = manager.withExclusiveMiner('s9', async () => { await blocker; });
+        const queued = [
+            adapter.minerManager.startMiner('s9'),
+            adapter.minerManager.setProfile('s9', 'normal'),
+            adapter.minerManager.setPowerTarget('s9', 800),
+        ];
+        adapter.pvRelayOffMiners.add('s9');
+        adapter.pvRelayOffMiners.add('s19');
+        release();
+        await active;
+        for (const promise of queued) {
+            let failure: unknown;
+            try { await promise; } catch (error) { failure = error; }
+            expect(String(failure)).to.include('command blocked by PV safe stop');
+        }
+        for (const operation of [
+            () => adapter.minerManager.startMiner('s19'),
+            () => adapter.minerManager.setProfile('s19', 'normal'),
+            () => adapter.minerManager.setPowerTarget('s19', 1800),
+        ]) {
+            let failure: unknown;
+            try { await operation(); } catch (error) { failure = error; }
+            expect(String(failure)).to.include('command blocked by PV safe stop');
+        }
+        expect(calls).to.deep.equal([]);
+    });
+});
+
 /**
  * Direct tests of the actual private safeStopPvMiner method using a controller-free
  * adapter. No real miner, Sonoff relay, or ioBroker instance is contacted.
