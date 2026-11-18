@@ -16,7 +16,7 @@ describe('PV restart interruption simulation (no hardware)', () => {
         startupDelayMs: 120_000,
     });
 
-    function setup() {
+    function setup(): { manager: MinerManager; locks: Set<string>; calls: string[] } {
         const manager = new MinerManager();
         const locks = new Set(['s9', 's19']);
         const calls: string[] = [];
