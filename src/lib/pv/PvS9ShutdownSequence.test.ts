@@ -80,7 +80,7 @@ describe('PV S9 two-phase shutdown sequence (fake hardware)', () => {
             const relayOk = isPvRelayOffConfirmed(
                 false, relayAt, !options.relayFeedbackLostAfterOff, true, offAt, now, ageMs,
             );
-            const power = options.missingPostSample && reading === 2 ? undefined : 0;
+            const power = options.missingPostSample && reading >= 2 ? undefined : 0;
             if (post.update(power, powerAt, relayOk, now, ageMs)) {
                 // Revalidate relay feedback immediately before recording stop.
                 if (isPvRelayOffConfirmed(false, relayAt, !options.relayFeedbackLostAfterOff,
