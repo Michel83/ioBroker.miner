@@ -345,7 +345,12 @@ export class MinerAdapter extends utils.Adapter {
                         return;
                     }
 
-                    if (this.pvSafeStops.has(deviceSettings.settings.id) || this.pvShuttingDown) {
+                    if (!isPvMinerCommandAllowed(
+                        deviceSettings.settings.id,
+                        this.pvSafeStops,
+                        this.pvRelayOffMiners,
+                        this.pvShuttingDown,
+                    )) {
                         this.log.warn(
                             `setPowerTarget blocked for ${deviceSettings.name}: PV safe stop or adapter shutdown active`,
                         );
