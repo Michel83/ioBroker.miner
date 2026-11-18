@@ -1118,6 +1118,70 @@ describe('PV ioBroker stateChange command interlock (mocked IO)', () => {
     });
 });
 
+describe('PV direct ioBroker control state interlock (mocked IO)', () => {
+    for (const minerId of ['s9', 's19']) {
+        it(`blocks unacknowledged running/profile/powerTarget writes for locked ${minerId}`, async () => {
+            const adapter = createTestAdapter() as unknown as {
+                pvRelayOffMiners: Set<string>;
+                onStateChange: (id: string, state: ioBroker.State) => Promise<void>;
+                getObjectAsync: (id: string) => Promise<unknown>;
+                getStateAsync: (id: string) => Promise<{ val: boolean }>;
+                setState: (id: string, state: unknown) => Promise<void>;
+                minerManager: {
+                    miners: Array<unknown>;
+                };
+            };
+            const calls: string[] = [];
+            adapter.minerManager.miners.push({
+                settings: { id: minerId },
+                start: async () => { calls.push('start'); },
+                setProfile: async () => { calls.push('profile'); },
+                setPowerTarget: async () => { calls.push('powerTarget'); },
+            });
+            adapter.pvRelayOffMiners.add(minerId);
+            adapter.getObjectAsync = async id => id.endsWith('.control.powerTarget')
+                ? { common: { min: 100, max: 3000 } }
+                : {
+                    native: {
+                        category: 'miner',
+                        name: minerId,
+                        settings: { id: minerId, minerType: 'bosMiner' },
+                    },
+                };
+            adapter.getStateAsync = async () => ({ val: true });
+            const acknowledgements: string[] = [];
+            adapter.setState = async id => { acknowledgements.push(id); };
+            for (const [feature, value] of [
+                ['running', true],
+                ['profile', 'normal'],
+                ['powerTarget', 800],
+            ] as const) {
+                const stateId = `miner.0.miner.${minerId}.control.${feature}`;
+                let failure: unknown;
+                try {
+                    await adapter.onStateChange(stateId, {
+                        val: value,
+                        ack: false,
+                        ts: Date.now(),
+                    } as ioBroker.State);
+                } catch (error) {
+                    failure = error;
+                }
+                if (feature === 'profile') {
+                    // Profile is rejected by the adapter's direct guard.
+                    expect(failure).to.equal(undefined);
+                } else {
+                    // Running/powerTarget are rejected by the real manager guard.
+                    expect(String(failure)).to.include('command blocked by PV safe stop');
+                }
+            }
+            expect(calls).to.deep.equal([]);
+            expect(acknowledgements).to.deep.equal([]);
+            expect(adapter.pvRelayOffMiners.has(minerId)).to.equal(true);
+        });
+    }
+});
+
 /**
  * Direct tests of the actual private safeStopPvMiner method using a controller-free
  * adapter. No real miner, Sonoff relay, or ioBroker instance is contacted.
