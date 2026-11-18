@@ -80,6 +80,11 @@ export function decidePvTargetV243(input: PvTargetInputsV243): PvTargetDecisionV
     if (target === current) {
         return hold('unchanged');
     }
+    // Battery power is positive when discharging. Never increase either miner's
+    // consumption while the battery is supplying energy, even if the grid exports.
+    if (target > current && battery > 0) {
+        return hold('battery-discharging');
+    }
     if (miner === 'S19' && target > current) {
         const validCandidate =
             input.increaseCandidateWatts === target &&
