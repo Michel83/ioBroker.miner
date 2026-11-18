@@ -1048,6 +1048,72 @@ describe('PV S9 safeStopPvMiner direct integration (mocked IO)', () => {
         return { adapter, settings, commands };
     }
 
+    it('runs real safeStopPvMiner through three pre-OFF and three post-OFF S9 readings', async () => {
+        const { adapter, settings, commands } = setup();
+        const harness = adapter as StopHarness & {
+            delay: (ms: number) => Promise<void>;
+            extendObject: (id: string, object: unknown) => Promise<void>;
+            setState: (id: string, state: { val: string; ack: boolean }) => Promise<void>;
+            pvRelayOffMiners: Set<string>;
+            pvSafeStops: Set<string>;
+        };
+        const originalNow = Date.now;
+        let clock = 1_800_000_000_000;
+        const pauseAt = clock;
+        let offAt: number | undefined;
+        const persisted = new Map<string, string>();
+        try {
+            Date.now = () => clock;
+            harness.delay = async ms => { clock += ms; };
+            harness.getStateAsync = async id => ({
+                val: id.endsWith('lastSeen') ? clock : 0,
+                ts: clock,
+            });
+            harness.readFreshPvMeasurement = async (_id, maxAgeMs) => {
+                const origin = offAt ?? pauseAt;
+                const elapsed = clock - origin;
+                const index = Math.floor(elapsed / 130_000);
+                const timestamp = index === 0 ? origin - 1 : origin + index * 130_000;
+                if (clock - timestamp > maxAgeMs) {
+                    throw new Error('Stale S9 telemetry');
+                }
+                return { value: offAt === undefined ? 50 : 0, timestamp };
+            };
+            harness.getForeignStateAsync = async () => ({
+                val: offAt === undefined,
+                ts: clock,
+                ack: true,
+            });
+            harness.setForeignStateAsync = async (_id, value) => {
+                expect(value).to.equal(false);
+                expect(clock - pauseAt).to.be.at.least(390_000);
+                offAt = clock;
+                commands.push('relay.off');
+            };
+            harness.extendObject = async () => {};
+            harness.setState = async (id, state) => {
+                expect(state.ack).to.equal(true);
+                persisted.set(id, state.val);
+            };
+
+            await harness.safeStopPvMiner(settings);
+
+            expect(commands).to.deep.equal(['pause', 'relay.off']);
+            expect(offAt).to.be.a('number');
+            expect(clock - offAt!).to.be.at.least(390_000);
+            expect(persisted.size).to.equal(1);
+            const record = JSON.parse([...persisted.values()][0]) as {
+                minerId: string; relayOffConfirmed: boolean;
+            };
+            expect(record.minerId).to.equal('S9');
+            expect(record.relayOffConfirmed).to.equal(true);
+            expect(harness.pvRelayOffMiners.has('S9')).to.equal(true);
+            expect(harness.pvSafeStops.has('S9')).to.equal(false);
+        } finally {
+            Date.now = originalNow;
+        }
+    });
+
     it('never issues relay OFF when the miner pause command fails', async () => {
         const { adapter, settings, commands } = setup();
         adapter.minerManager.withExclusiveMiner = async (_id, fn) => fn({
