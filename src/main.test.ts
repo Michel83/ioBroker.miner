@@ -1167,11 +1167,11 @@ describe('PV direct ioBroker control state interlock (mocked IO)', () => {
                 } catch (error) {
                     failure = error;
                 }
-                if (feature === 'profile') {
-                    // Profile is rejected by the adapter's direct guard.
+                if (feature === 'profile' || feature === 'powerTarget') {
+                    // Both are rejected directly by the adapter before reaching the manager.
                     expect(failure).to.equal(undefined);
                 } else {
-                    // Running/powerTarget are rejected by the real manager guard.
+                    // Running is rejected by the real manager guard.
                     expect(String(failure)).to.include('command blocked by PV safe stop');
                 }
             }
@@ -1180,6 +1180,35 @@ describe('PV direct ioBroker control state interlock (mocked IO)', () => {
             expect(adapter.pvRelayOffMiners.has(minerId)).to.equal(true);
         });
     }
+});
+
+describe('PV direct powerTarget guard before manager dispatch (mocked IO)', () => {
+    it('never calls the manager for a locked S9 even when the manager is replaced', async () => {
+        const adapter = createTestAdapter() as unknown as {
+            pvRelayOffMiners: Set<string>;
+            onStateChange: (id: string, state: ioBroker.State) => Promise<void>;
+            getObjectAsync: (id: string) => Promise<unknown>;
+            getStateAsync: (id: string) => Promise<{ val: boolean }>;
+            setState: (id: string, state: unknown) => Promise<void>;
+            minerManager: { setPowerTarget: (id: string, watts: number) => Promise<void> };
+        };
+        let dispatched = 0;
+        adapter.pvRelayOffMiners.add('s9');
+        adapter.getObjectAsync = async id => id.endsWith('.control.powerTarget')
+            ? { common: { min: 100, max: 3000 } }
+            : { native: {
+                category: 'miner', name: 'S9',
+                settings: { id: 's9', minerType: 'bosMiner' },
+            } };
+        adapter.getStateAsync = async () => ({ val: true });
+        adapter.setState = async () => { throw new Error('blocked command must not be acknowledged'); };
+        adapter.minerManager.setPowerTarget = async () => { dispatched++; };
+        await adapter.onStateChange('miner.0.miner.s9.control.powerTarget', {
+            val: 800, ack: false, ts: Date.now(),
+        } as ioBroker.State);
+        expect(dispatched).to.equal(0);
+        expect(adapter.pvRelayOffMiners.has('s9')).to.equal(true);
+    });
 });
 
 /**
