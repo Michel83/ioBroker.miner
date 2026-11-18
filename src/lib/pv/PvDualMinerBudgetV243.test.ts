@@ -52,4 +52,16 @@ describe('V2.43 read-only shared S9/S19 PV budget', () => {
         expect(result.s9.action).to.equal('set-target');
         expect(result.s19.action).to.equal('set-target');
     });
+    it('coordinates already-stabilized monitor proposals without double spending', () => {
+        const result = coordinatePvTargetsV243({
+            s9, s19, gridPowerWatts: -800, batteryPowerWatts: 0, reserveWatts: 200,
+            proposals: {
+                s9: { action: 'set-target', targetWatts: 1400, reason: 'increase-surplus' },
+                s19: { action: 'set-target', targetWatts: 1900, reason: 'increase-surplus' },
+            },
+        });
+        expect(result.s19.targetWatts).to.equal(1900);
+        expect(result.s9).to.include({ action: 'hold', reason: 'shared-budget-insufficient' });
+    });
+
 });
