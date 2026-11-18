@@ -139,4 +139,50 @@ describe('V2.43 read-only start and stop eligibility', () => {
         expect(afterRestart.s19).to.equal('switch-stabilizing');
         expect(afterRestart.s9ToS19CandidateSince).to.equal(900000);
     });
+    it('simulates a full PV day with both miners, fluctuations, recovery and evening lockout', () => {
+        let history: ReturnType<typeof evaluatePvRunEligibilityV243> | undefined;
+        const step = (minute: number, hour: number, availableWatts: number | undefined,
+            s9Running: boolean, s19Running: boolean, gridPowerWatts: number,
+            s9TargetWatts = 1800, s9ActualWatts = 1300) => {
+            const result = evaluatePvRunEligibilityV243({
+                now: minute * 60_000,
+                hour,
+                availableWatts,
+                s9Running,
+                s19Running,
+                gridPowerWatts,
+                s9TargetWatts,
+                s9ActualWatts,
+                s9ToS19CandidateSince: history?.s9ToS19CandidateSince,
+                s9LowPowerSince: history?.s9LowPowerSince,
+                s19LowPowerSince: history?.s19LowPowerSince,
+            });
+            history = result;
+            return result;
+        };
+        // Morning: even abundant power must not authorize a start before noon.
+        expect(step(600, 10, 3000, false, false, -3200).s19).to.equal('outside-window');
+        expect(step(720, 12, 400, false, false, -500).s9).to.equal('insufficient-surplus');
+        expect(step(722, 12, 700, false, false, -900).s9).to.equal('start-threshold-met');
+        // S9 is only observed as running; the diagnostic never starts it.
+        expect(step(724, 12, 2200, true, false, -400).s19).to.equal('switch-stabilizing');
+        // A brief export dip resets the entire switch stabilization window.
+        expect(step(725, 12, 2200, true, false, -250).s19).to.equal('hold');
+        expect(step(726, 12, 2200, true, false, -400).s19).to.equal('switch-stabilizing');
+        expect(step(727, 12, 2200, true, false, -400).s19).to.equal('switch-stabilizing');
+        expect(step(728, 12, 2200, true, false, -400).s19).to.equal('switch-threshold-met');
+        // Both miners running: falling surplus must persist for 120 seconds.
+        expect(step(900, 15, 400, true, true, 200).s9).to.equal('low-power-wait');
+        expect(step(901, 15, 1600, true, true, -1800).s9).to.equal('hold');
+        expect(step(902, 15, 400, true, true, 200).s9).to.equal('low-power-wait');
+        expect(step(903, 15, 400, true, true, 200).s9).to.equal('low-power-wait');
+        const low = step(904, 15, 400, true, true, 200);
+        expect(low.s9).to.equal('low-power-stop-threshold-met');
+        expect(low.s19).to.equal('low-power-stop-threshold-met');
+        // Missing data discards both stop timers; recovery must begin from zero.
+        expect(step(905, 15, undefined, true, true, 200).s19).to.equal('unavailable');
+        expect(step(906, 15, 400, true, true, 200).s19).to.equal('low-power-wait');
+        expect(step(1200, 20, 3500, false, false, -3700).s9).to.equal('outside-window');
+    });
+
 });
