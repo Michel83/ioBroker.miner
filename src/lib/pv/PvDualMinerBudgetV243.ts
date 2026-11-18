@@ -11,6 +11,7 @@ export function coordinatePvTargetsV243(input: {
     gridPowerWatts: number;
     batteryPowerWatts: number;
     reserveWatts: number;
+    proposals?: { s9: PvTargetDecisionV243; s19: PvTargetDecisionV243 };
 }): { s9: PvTargetDecisionV243; s19: PvTargetDecisionV243 } {
     const { s9, s19, gridPowerWatts: grid, batteryPowerWatts: battery, reserveWatts: reserve } = input;
     const blocked = { action: 'hold', reason: 'shared-budget-unavailable' } as const;
@@ -26,8 +27,8 @@ export function coordinatePvTargetsV243(input: {
     }
 
     let budget = Math.max(0, -grid - reserve - Math.max(0, battery));
-    const s19Decision = decidePvTargetV243(s19);
-    const s9Decision = decidePvTargetV243(s9);
+    const s19Decision = input.proposals?.s19 ?? decidePvTargetV243(s19);
+    const s9Decision = input.proposals?.s9 ?? decidePvTargetV243(s9);
     const admit = (decision: PvTargetDecisionV243, current: number): PvTargetDecisionV243 => {
         if (decision.action !== 'set-target' || decision.targetWatts === undefined ||
             decision.targetWatts <= current) {
