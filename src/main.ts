@@ -28,6 +28,7 @@ import {
     isPvStopRestorationConsistent,
 } from './lib/pv/PvShutdownSafety';
 import { calculatePvV243 } from './lib/pv/PvRegulationV243';
+import { getPvShutdownTiming } from './lib/pv/PvShutdownTiming';
 import { confirmedPvRelayOn } from './lib/pv/PvRelayFeedbackDiagnostic';
 import { pvRestartCountdownSeconds } from './lib/pv/PvRestartCountdown';
 import { pvRestartSafetyReason } from './lib/pv/PvRestartSafetyReason';
@@ -1653,17 +1654,14 @@ export class MinerAdapter extends utils.Adapter {
             throw new Error(`PV safe stop only implemented for BOSMiner: ${settings.name}`);
         }
         const feedbackId = pv.relayFeedbackStateId || pv.relayStateId;
-        const powerSampleGapMs = Math.min(180, Math.max(15, Number(pv.powerSampleMaxGap) || 15)) * 1000;
-        // Three distinct samples can require two full telemetry intervals after the first update.
-        const confirmationTimeoutMs = Math.max(
-            90_000,
-            (Number(pv.relayOffConfirmationTimeout) || 90) * 1000,
-            3 * powerSampleGapMs + 30_000,
-        );
+        // Per-miner telemetry settings; preserves existing S19 defaults.
+        const timing = getPvShutdownTiming(pv.powerSampleMaxGap, pv.relayOffConfirmationTimeout);
+        const powerSampleGapMs = timing.powerSampleGapMs;
+        const confirmationTimeoutMs = timing.postRelayTimeoutMs;
         this.pvSafeStops.add(id);
         const deviceId = this.getDeviceObjectId(settings);
         const ageMs = Math.max(10, Number(this.config.pvMaxDataAge) || 180) * 1000;
-        const maxWaitMs = Math.max(5 * 60_000, 3 * powerSampleGapMs + 60_000);
+        const maxWaitMs = timing.preRelayTimeoutMs;
         const started = Date.now();
         const confirmation = new PvShutdownConfirmation();
         let pausedAt = 0;
